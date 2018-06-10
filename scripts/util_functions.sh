@@ -266,12 +266,15 @@ api_level_arch_detect() {
   ABILONG=`grep_prop ro.product.cpu.abi`
 
   ARCH=arm
-  ARCH32=arm
   IS64BIT=false
   if [ "$ABI" = "x86" ]; then ARCH=x86; ARCH32=x86; fi;
   if [ "$ABI2" = "x86" ]; then ARCH=x86; ARCH32=x86; fi;
   if [ "$ABILONG" = "arm64-v8a" ]; then ARCH=arm64; ARCH32=arm; IS64BIT=true; fi;
   if [ "$ABILONG" = "x86_64" ]; then ARCH=x64; ARCH32=x86; IS64BIT=true; fi;
+  if [ "$ABI" = "x86" ]; then ARCH=x86; fi;
+  if [ "$ABI2" = "x86" ]; then ARCH=x86; fi;
+  if [ "$ABILONG" = "arm64-v8a" ]; then ARCH=arm64; fi;
+  if [ "$ABILONG" = "x86_64" ]; then ARCH=x64; fi;
 }
 
 boot_actions() {
