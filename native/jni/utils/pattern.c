@@ -63,13 +63,13 @@ int patch_verity(void **buf, uint32_t *size, int patch) {
 	char *src = *buf, *patched = patch ? xcalloc(src_size, 1) : NULL;
 	for (int read = 0, write = 0; read < src_size; ++read, ++write) {
 		if ((skip = check_verity_pattern(src + read)) > 0) {
-			if (!patch) {
+			if (patch) {
 				fprintf(stderr, "Remove pattern [%.*s]\n", skip, src + read);
-				read += skip;
 				*size -= skip;
 			} else {
 				fprintf(stderr, "Found pattern [%.*s]\n", skip, src + read);
 			}
+			read += skip;
 			found = 1;
 		}
 		if (patch)
