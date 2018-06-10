@@ -42,7 +42,7 @@ else:
 	ndk_build = os.path.join(os.environ['ANDROID_HOME'], 'ndk-bundle', 'ndk-build')
 
 cpu_count = multiprocessing.cpu_count()
-archs = ['armeabi-v7a', 'x86']
+archs = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']
 
 def mv(source, target):
 	try:
@@ -291,7 +291,7 @@ def zip_main(args):
 		zip_with_msg(zipf, source, target)
 
 		# Binaries
-		for lib_dir, zip_dir in [('armeabi-v7a', 'arm'), ('x86', 'x86')]:
+		for lib_dir, zip_dir in [('arm64-v8a', 'arm64'), ('armeabi-v7a', 'arm'), ('x86', 'x86'), ('x86_64', 'x64')]:
 			for binary in ['magiskinit', 'magiskboot']:
 				source = os.path.join('native', 'out', lib_dir, binary)
 				target = os.path.join(zip_dir, binary)
@@ -350,7 +350,7 @@ def zip_uninstaller(args):
 		zip_with_msg(zipf, source, target)
 
 		# Binaries
-		for lib_dir, zip_dir in [('armeabi-v7a', 'arm'), ('x86', 'x86')]:
+		for lib_dir, zip_dir in [('arm64-v8a', 'arm64'), ('armeabi-v7a', 'arm'), ('x86', 'x86'), ('x86_64', 'x64')]:
 			source = os.path.join('native', 'out', lib_dir, 'magiskboot')
 			target = os.path.join(zip_dir, 'magiskboot')
 			zip_with_msg(zipf, source, target)
