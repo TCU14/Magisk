@@ -71,14 +71,14 @@ int magisk_main(int argc, char *argv[]) {
 		printf("%s (%d)\n", MAGISK_VER_STR, MAGISK_VER_CODE);
 		return 0;
 	} else if (strcmp(argv[1], "-v") == 0) {
-		int fd = connect_daemon(0);
+		int fd = connect_daemon();
 		write_int(fd, CHECK_VERSION);
 		char *v = read_string(fd);
 		printf("%s\n", v);
 		free(v);
 		return 0;
 	} else if (strcmp(argv[1], "-V") == 0) {
-		int fd = connect_daemon(0);
+		int fd = connect_daemon();
 		write_int(fd, CHECK_VERSION_CODE);
 		printf("%d\n", read_int(fd));
 		return 0;
@@ -143,18 +143,18 @@ int magisk_main(int argc, char *argv[]) {
 		clone_attr(argv[2], argv[3]);
 		return 0;
 	} else if (strcmp(argv[1], "--daemon") == 0) {
-		int fd = connect_daemon(0);
+		int fd = connect_daemon();
 		close(fd);
 		return 0;
 	} else if (strcmp(argv[1], "--startup") == 0) {
 		startup();
 		return 0;
 	} else if (strcmp(argv[1], "--post-fs-data") == 0) {
-		int fd = connect_daemon(1);
+		int fd = connect_daemon();
 		write_int(fd, POST_FS_DATA);
 		return read_int(fd);
 	} else if (strcmp(argv[1], "--service") == 0) {
-		int fd = connect_daemon(0);
+		int fd = connect_daemon();
 		write_int(fd, LATE_START);
 		return read_int(fd);
 	}
@@ -163,8 +163,10 @@ int magisk_main(int argc, char *argv[]) {
 	argc--;
 	argv++;
 	for (int i = 0; applet[i]; ++i) {
-		if (strcmp(basename(argv[0]), applet[i]) == 0)
+		if (strcmp(basename(argv[0]), applet[i]) == 0) {
+			strcpy(argv0, basename(argv[0]));
 			return (*applet_main[i])(argc, argv);
+		}
 	}
 
 	usage();
@@ -184,8 +186,10 @@ int main(int argc, char *argv[]) {
 
 	// Applets
 	for (int i = 0; applet[i]; ++i) {
-		if (strcmp(basename(argv[0]), applet[i]) == 0)
+		if (strcmp(basename(argv[0]), applet[i]) == 0) {
+			strcpy(argv0, basename(argv[0]));
 			return (*applet_main[i])(argc, argv);
+		}
 	}
 
 	// Not an applet
