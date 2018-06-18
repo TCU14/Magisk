@@ -144,20 +144,9 @@ fi
 
 ui_print "- Patching ramdisk"
 
-if [[ "`getprop ro.product.model`" = SM-G96[05]F ]]; then
-  ln ./magiskinit ./magiskpolicy
-  ./magiskpolicy --magisk --load /vendor/etc/selinux/precompiled_sepolicy \
-    --save ./sepolicy
-
-  ./magiskboot --cpio ramdisk.cpio \
-  "add 750 init magiskinit" \
-  "add 440 sepolicy sepolicy" \
-  "magisk ramdisk.cpio.orig $HIGHCOMP $KEEPVERITY $KEEPFORCEENCRYPT $SHA1"
-else
-  ./magiskboot --cpio ramdisk.cpio \
-  "add 750 init magiskinit" \
-  "magisk ramdisk.cpio.orig $HIGHCOMP $KEEPVERITY $KEEPFORCEENCRYPT $SHA1"
-fi
+./magiskboot --cpio ramdisk.cpio \
+"add 750 init magiskinit" \
+"magisk ramdisk.cpio.orig $HIGHCOMP $KEEPVERITY $KEEPFORCEENCRYPT $SHA1"
 
 rm -f ramdisk.cpio.orig
 
