@@ -103,7 +103,9 @@ chmod -R 755 $MAGISKBIN
 if [ -d /system/addon.d ]; then
   ui_print "- Adding addon.d survival script"
   mount -o rw,remount /system
-  cp -af $INSTALLER/common/99-magisk.sh /system/addon.d/99-magisk.sh
+  echo "#!/sbin/sh" > /system/addon.d/99-magisk.sh
+  echo "# ADDOND_VERSION=2" >> /system/addon.d/99-magisk.sh
+  echo ". /data/adb/magisk/addon.d.sh" >> /system/addon.d/99-magisk.sh
   chmod 755 /system/addon.d/99-magisk.sh
 fi
 
@@ -120,7 +122,7 @@ SOURCEDMODE=true
 cd $MAGISKBIN
 
 # Source the boot patcher
-. $COMMONDIR/boot_patch.sh "$BOOTIMAGE"
+. ./boot_patch.sh "$BOOTIMAGE"
 
 flash_boot_image new-boot.img "$BOOTIMAGE"
 rm -f new-boot.img
