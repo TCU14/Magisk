@@ -217,27 +217,6 @@ patch_dtbo_image() {
   return 1
 }
 
-restore_imgs() {
-  STOCKBOOT=/data/stock_boot_${1}.img.gz
-  STOCKDTBO=/data/stock_dtbo.img.gz
-
-  # Make sure all blocks are writable
-  $MAGISKBIN/magisk --unlock-blocks 2>/dev/null
-  find_dtbo_image
-  if [ ! -z "$DTBOIMAGE" -a -f "$STOCKDTBO" ]; then
-    ui_print "- Restoring stock dtbo image"
-    gzip -d < $STOCKDTBO | dd of=$DTBOIMAGE
-  fi
-  BOOTSIGNED=false
-  find_boot_image
-  if [ ! -z "$BOOTIMAGE" -a -f "$STOCKBOOT" ]; then
-    ui_print "- Restoring stock boot image"
-    gzip -d < $STOCKBOOT | cat - /dev/zero 2>/dev/null | dd of="$BOOTIMAGE" bs=4096 2>/dev/null
-    return 0
-  fi
-  return 1
-}
-
 sign_chromeos() {
   ui_print "- Signing ChromeOS boot image"
 
@@ -296,6 +275,17 @@ api_level_arch_detect() {
   if [ "$ABI2" = "x86" ]; then ARCH=x86; fi;
   if [ "$ABILONG" = "arm64-v8a" ]; then ARCH=arm64; fi;
   if [ "$ABILONG" = "x86_64" ]; then ARCH=x64; fi;
+}
+
+check_data() {
+  DATA=false
+  DATA_DE=false
+  if grep ' /data ' /proc/mounts | grep -vq 'tmpfs'; then
+    # Test if data is writable
+    touch /data/.rw && rm /data/.rw && DATA=true
+    # Test if DE storage is writable
+    $DATA && [ -d /data/adb ] && touch /data/adb/.rw && rm /data/adb/.rw && DATA_DE=true
+  fi
 }
 
 setup_bb() {
