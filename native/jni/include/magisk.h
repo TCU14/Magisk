@@ -7,7 +7,8 @@
 #include "logging.h"
 
 #define MAGISK_VER_STR  xstr(MAGISK_VERSION) ":MAGISK"
-#define SOCKET_NAME     "d30138f2310a9fb9c54a3e0c21f58591"
+#define MAIN_SOCKET  "d30138f2310a9fb9c54a3e0c21f58591"
+#define LOG_SOCKET   "5864cd77f2f8c59b3882e2d35dbf51e4"
 #define JAVA_PACKAGE_NAME "com.topjohnwu.magisk"
 
 #ifndef ARG_MAX
@@ -18,6 +19,7 @@
 #define UNBLOCKFILE     "/dev/.magisk.unblock"
 #define DISABLEFILE     "/cache/.disable_magisk"
 #define MAGISKTMP       "/sbin/.core"
+#define BLOCKDIR        MAGISKTMP "/block"
 #define MIRRDIR         MAGISKTMP "/mirror"
 #define BBPATH          MAGISKTMP "/busybox"
 #define MOUNTPOINT      MAGISKTMP "/img"
@@ -29,7 +31,6 @@
 #define DATABIN         SECURE_DIR "/magisk"
 #define MAGISKDB        SECURE_DIR "/magisk.db"
 #define SIMPLEMOUNT     SECURE_DIR "/magisk_simple"
-#define DEBUG_LOG       SECURE_DIR "/magisk_debug.log"
 #define MANAGERAPK      DATABIN "/magisk.apk"
 #define MAGISKRC        "/init.magisk.rc"
 

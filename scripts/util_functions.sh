@@ -23,10 +23,10 @@ BOOTSIGNER="/system/bin/dalvikvm -Xnodex2oat -Xnoimage-dex2oat -cp \$APK com.top
 BOOTSIGNED=false
 
 get_outfd() {
-  if [ $OUTFD -eq 1 ]; then
+  if [ -z $OUTFD ] || readlink /proc/$$/fd/$OUTFD | grep -q /tmp; then
     # We will have to manually find out OUTFD
-    for FD in `ls /proc/self/fd`; do
-      if readlink /proc/self/fd/$FD | grep -q pipe; then
+    for FD in `ls /proc/$$/fd`; do
+      if readlink /proc/$$/fd/$FD | grep -q pipe; then
         if ps | grep -v grep | grep -q " 3 $FD "; then
           OUTFD=$FD
           break
@@ -45,6 +45,14 @@ toupper() {
 }
 
 find_block() {
+  for BLOCK in "$@"; do
+    DEVICE=`find /dev/block -type l -iname $BLOCK | head -n 1` 2>/dev/null
+    if [ ! -z $DEVICE ]; then
+      readlink -f $DEVICE
+      return 0
+    fi
+  done
+  # Fallback by parsing sysfs uevents
   for uevent in /sys/dev/block/*/uevent; do
     local DEVNAME=`grep_prop DEVNAME $uevent`
     local PARTNAME=`grep_prop PARTNAME $uevent`
@@ -154,11 +162,9 @@ run_migrations() {
   fi
   # Move the stock backups
   if [ -f /data/magisk/stock_boot* ]; then
-    rm -rf /data/stock_boot*
     mv /data/magisk/stock_boot* /data 2>/dev/null
   fi
   if [ -f /data/adb/magisk/stock_boot* ]; then
-    rm -rf /data/stock_boot*
     mv /data/adb/magisk/stock_boot* /data 2>/dev/null
   fi
   # Remove old dbs
@@ -172,6 +178,10 @@ find_boot_image() {
     BOOTIMAGE=`find_block boot$SLOT ramdisk$SLOT`
   else
     BOOTIMAGE=`find_block boot_a kern-a android_boot kernel boot lnx bootimg`
+  fi
+  if [ -z $BOOTIMAGE ]; then
+    # Lets see what fstabs tells me
+    BOOTIMAGE=`grep -v '#' /etc/*fstab* | grep -E '/boot[^a-zA-Z]' | grep -oE '/dev/[a-zA-Z0-9_./-]*' | head -n 1`
   fi
 }
 
@@ -207,9 +217,9 @@ find_dtbo_image() {
 patch_dtbo_image() {
   if [ ! -z $DTBOIMAGE ]; then
     if $MAGISKBIN/magiskboot --dtb-test $DTBOIMAGE; then
-      ui_print "- Backing up stock dtbo image"
+      ui_print "- Backing up stock DTBO image"
       $MAGISKBIN/magiskboot --compress $DTBOIMAGE $MAGISKBIN/stock_dtbo.img.gz
-      ui_print "- Patching fstab in dtbo to remove avb-verity"
+      ui_print "- Patching DTBO to remove avb-verity"
       $MAGISKBIN/magiskboot --dtb-patch $DTBOIMAGE
       return 0
     fi

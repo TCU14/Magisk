@@ -170,22 +170,38 @@ void ps(void (*func)(int)) {
 static void (*ps_filter_cb)(int);
 static const char *ps_filter_pattern;
 static void proc_name_filter(int pid) {
-	char buf[64];
-	int fd;
-	snprintf(buf, sizeof(buf), "/proc/%d/cmdline", pid);
-	if (access(buf, R_OK) == -1 || (fd = xopen(buf, O_RDONLY)) == -1)
+	char buf[128];
+	FILE *f;
+	sprintf(buf, "/proc/%d/comm", pid);
+	if ((f = fopen(buf, "r"))) {
+		fgets(buf, sizeof(buf), f);
+		if (strcmp(buf, ps_filter_pattern) == 0)
+			goto run_cb;
+	} else {
+		// The PID is already killed
 		return;
-	if (fdgets(buf, sizeof(buf), fd) == 0) {
-		snprintf(buf, sizeof(buf), "/proc/%d/comm", pid);
-		close(fd);
-		if (access(buf, R_OK) == -1 || (fd = xopen(buf, O_RDONLY)) == -1)
-			return;
-		fdgets(buf, sizeof(buf), fd);
 	}
-	if (strcmp(buf, ps_filter_pattern) == 0) {
-		ps_filter_cb(pid);
-	}
-	close(fd);
+	fclose(f);
+
+	sprintf(buf, "/proc/%d/cmdline", pid);
+	f = fopen(buf, "r");
+	fgets(buf, sizeof(buf), f);
+	if (strcmp(basename(buf), ps_filter_pattern) == 0)
+		goto run_cb;
+	fclose(f);
+
+	sprintf(buf, "/proc/%d/exe", pid);
+	if (access(buf, F_OK) != 0)
+		return;
+	xreadlink(buf, buf, sizeof(buf));
+	if (strcmp(basename(buf), ps_filter_pattern) == 0)
+		goto run_cb;
+
+	return;
+run_cb:
+	ps_filter_cb(pid);
+	fclose(f);
+	return;
 }
 
 /* Call func with process name filtered with pattern */
@@ -229,9 +245,9 @@ void setup_sighandlers(void (*handler)(int)) {
    fd == NULL -> Ignore output
   *fd < 0     -> Open pipe and set *fd to the read end
   *fd >= 0    -> STDOUT (or STDERR) will be redirected to *fd
-  *cb         -> A callback function which runs after fork
+  *setenv     -> A callback function which sets up a vector of environment variables
 */
-static int v_exec_command(int err, int *fd, void (*setupenv)(struct vector*), const char *argv0, va_list argv) {
+int exec_array(int err, int *fd, void (*setenv)(struct vector *), char *const *argv) {
 	int pipefd[2], writeEnd = -1;
 
 	if (fd) {
@@ -244,20 +260,12 @@ static int v_exec_command(int err, int *fd, void (*setupenv)(struct vector*), co
 		}
 	}
 
-	// Collect va_list into vector
-	struct vector args;
-	vec_init(&args);
-	vec_push_back(&args, strdup(argv0));
-	for (void *arg = va_arg(argv, void*); arg; arg = va_arg(argv, void*))
-		vec_push_back(&args, strdup(arg));
-	vec_push_back(&args, NULL);
-
 	// Setup environment
 	char *const *envp;
 	struct vector env;
 	vec_init(&env);
-	if (setupenv) {
-		setupenv(&env);
+	if (setenv) {
+		setenv(&env);
 		envp = (char **) vec_entry(&env);
 	} else {
 		extern char **environ;
@@ -271,19 +279,32 @@ static int v_exec_command(int err, int *fd, void (*setupenv)(struct vector*), co
 			*fd = pipefd[0];
 			close(pipefd[1]);
 		}
-		vec_deep_destroy(&args);
 		vec_deep_destroy(&env);
 		return pid;
 	}
 
 	if (fd) {
 		xdup2(writeEnd, STDOUT_FILENO);
-		if (err) xdup2(writeEnd, STDERR_FILENO);
+		if (err)
+			xdup2(writeEnd, STDERR_FILENO);
 	}
 
-	execvpe(argv0, (char **) vec_entry(&args), envp);
-	PLOGE("execvpe %s", argv0);
+	execvpe(argv[0], argv, envp);
+	PLOGE("execvpe %s", argv[0]);
 	return -1;
+}
+
+static int v_exec_command(int err, int *fd, void (*setenv)(struct vector*), const char *argv0, va_list argv) {
+	// Collect va_list into vector
+	struct vector args;
+	vec_init(&args);
+	vec_push_back(&args, strdup(argv0));
+	for (void *arg = va_arg(argv, void*); arg; arg = va_arg(argv, void*))
+		vec_push_back(&args, strdup(arg));
+	vec_push_back(&args, NULL);
+	int pid = exec_array(err, fd, setenv, (char **) vec_entry(&args));
+	vec_deep_destroy(&args);
+	return pid;
 }
 
 int exec_command_sync(char *const argv0, ...) {
@@ -298,10 +319,10 @@ int exec_command_sync(char *const argv0, ...) {
 	return WEXITSTATUS(status);
 }
 
-int exec_command(int err, int *fd, void (*setupenv)(struct vector*), const char *argv0, ...) {
+int exec_command(int err, int *fd, void (*setenv)(struct vector*), const char *argv0, ...) {
 	va_list argv;
 	va_start(argv, argv0);
-	int pid = v_exec_command(err, fd, setupenv, argv0, argv);
+	int pid = v_exec_command(err, fd, setenv, argv0, argv);
 	va_end(argv);
 	return pid;
 }

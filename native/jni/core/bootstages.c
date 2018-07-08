@@ -440,6 +440,7 @@ static int prepare_img() {
 
 	if (trim_img(MAINIMG, MOUNTPOINT, magiskloop))
 		return 1;
+	free(magiskloop);
 	return 0;
 }
 
@@ -585,7 +586,7 @@ void startup() {
 	close(root);
 
 	// Alternative binaries paths
-	char *alt_bin[] = { "/cache/data_bin", "/data/magisk",
+	char *alt_bin[] = { "/cache/data_bin", "/data/.magisk",
 						"/data/data/com.topjohnwu.magisk/install",
 						"/data/user_de/0/com.topjohnwu.magisk/install", NULL };
 	char *bin_path = NULL;
@@ -602,6 +603,7 @@ void startup() {
 	}
 
 	// Remove legacy stuffs
+	rm_rf("/data/magisk");
 	unlink("/data/magisk.img");
 	unlink("/data/magisk_debug.log");
 
@@ -610,6 +612,7 @@ void startup() {
 	xmkdir(MIRRDIR "/bin", 0755);
 	xmkdir(BBPATH, 0755);
 	xmkdir(MOUNTPOINT, 0755);
+	xmkdir(BLOCKDIR, 0755);
 
 	LOGI("* Mounting mirrors");
 	struct vector mounts;
@@ -661,7 +664,7 @@ void startup() {
 	}
 
 	// Start post-fs-data mode
-	execl("/sbin/magisk", "magisk", "--post-fs-data", NULL);
+	execl("/sbin/magisk.bin", "magisk", "--post-fs-data", NULL);
 }
 
 void post_fs_data(int client) {
@@ -671,9 +674,6 @@ void post_fs_data(int client) {
 
 	// If post-fs-data mode is started, it means startup succeeded
 	setup_done = 1;
-
-	// Start the debug log
-	start_debug_full_log();
 
 	LOGI("** post-fs-data mode running\n");
 
@@ -841,6 +841,4 @@ core_only:
 	free(buf2);
 	buf = buf2 = NULL;
 	vec_deep_destroy(&module_list);
-
-	stop_debug_full_log();
 }

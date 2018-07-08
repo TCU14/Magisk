@@ -24,7 +24,9 @@ enum {
 	STOP_MAGISKHIDE,
 	ADD_HIDELIST,
 	RM_HIDELIST,
-	LS_HIDELIST
+	LS_HIDELIST,
+	HIDE_CONNECT,
+	HANDSHAKE
 };
 
 // Return codes for daemon
@@ -39,15 +41,26 @@ enum {
 	HIDE_ITEM_NOT_EXIST,
 };
 
+typedef enum {
+	MAIN_DAEMON,
+	LOG_DAEMON
+} daemon_t;
+
 // daemon.c
 
-void start_daemon();
+void main_daemon();
 int connect_daemon();
+int connect_daemon2(daemon_t d, int *sockfd);
 void auto_start_magiskhide();
+
+// log_monitor.c
+
+extern int loggable;
+void log_daemon();
 
 // socket.c
 
-int setup_socket(struct sockaddr_un *sun);
+int setup_socket(struct sockaddr_un *sun, daemon_t d);
 int recv_fd(int sockfd);
 void send_fd(int sockfd, int fd);
 int read_int(int fd);

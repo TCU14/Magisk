@@ -83,7 +83,8 @@ void ps(void (*func)(int));
 void ps_filter_proc_name(const char *filter, void (*func)(int));
 void unlock_blocks();
 void setup_sighandlers(void (*handler)(int));
-int exec_command(int err, int *fd, void (*setupenv)(struct vector*), const char *argv0, ...);
+int exec_array(int err, int *fd, void (*setenv)(struct vector *), char *const *argv);
+int exec_command(int err, int *fd, void (*setenv)(struct vector*), const char *argv0, ...);
 int exec_command_sync(char *const argv0, ...);
 int bind_mount(const char *from, const char *to);
 void get_client_cred(int fd, struct ucred *cred);
@@ -133,12 +134,8 @@ void write_zero(int fd, size_t size);
 
 // img.c
 
-#define round_size(a) ((((a) / 32) + 2) * 32)
-#define SOURCE_TMP "/dev/.img_src"
-#define TARGET_TMP "/dev/.img_tgt"
-
 int create_img(const char *img, int size);
-int resize_img(const char *img, int size, int enforce);
+int resize_img(const char *img, int size);
 char *mount_image(const char *img, const char *target);
 int umount_image(const char *target, const char *device);
 int merge_img(const char *source, const char *target);

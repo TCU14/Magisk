@@ -16,21 +16,19 @@
 #include <sys/mount.h>
 
 #include "magisk.h"
+#include "daemon.h"
 #include "utils.h"
 #include "magiskhide.h"
 
-static int pipefd[2] = { -1, -1 };
+static int sockfd = -1;
 
 // Workaround for the lack of pthread_cancel
 static void term_thread(int sig) {
 	LOGD("proc_monitor: running cleanup\n");
 	destroy_list();
 	hideEnabled = 0;
-	// Unregister listener
-	log_events[HIDE_EVENT].fd = -1;
-	close(pipefd[0]);
-	close(pipefd[1]);
-	pipefd[0] = pipefd[1] = -1;
+	close(sockfd);
+	sockfd = -1;
 	pthread_mutex_destroy(&hide_lock);
 	pthread_mutex_destroy(&file_lock);
 	LOGD("proc_monitor: terminating...\n");
@@ -128,79 +126,82 @@ void proc_monitor() {
 		term_thread(TERM_THREAD);
 	}
 
-	// Register our listener to logcat monitor
-	xpipe2(pipefd, O_CLOEXEC);
-	log_events[HIDE_EVENT].fd = pipefd[1];
+	while(1) {
+		// Connect to the log daemon
+		connect_daemon2(LOG_DAEMON, &sockfd);
+		write_int(sockfd, HIDE_CONNECT);
 
-	for (char *log, *line;; free(log)) {
-		if (read(pipefd[0], &log, sizeof(log)) != sizeof(log)) {
-			/* It might be interrupted */
-			log = NULL;
-			continue;
-		}
-		char *ss = strchr(log, '[');
-		int pid, ppid, ret, comma = 0;
-		char *pos = ss, proc[256], ns[32], pns[32];
+		FILE *log_in = fdopen(sockfd, "r");
+		char buf[4096];
+		while (fgets(buf, sizeof(buf), log_in)) {
+			char *ss = strchr(buf, '[');
+			int pid, ppid, num = 0;
+			char *pos = ss, proc[256], ns[32], pns[32];
 
-		while(1) {
-			pos = strchr(pos, ',');
-			if(pos == NULL)
-				break;
-			pos[0] = ' ';
-			++comma;
-		}
+			while(1) {
+				pos = strchr(pos, ',');
+				if(pos == NULL)
+					break;
+				pos[0] = ' ';
+				++num;
+			}
 
-		if (comma == 6)
-			ret = sscanf(ss, "[%*d %d %*d %*d %256s", &pid, proc);
-		else
-			ret = sscanf(ss, "[%*d %d %*d %256s", &pid, proc);
+			if(sscanf(ss, num == 6 ? "[%*d %d %*d %*d %256s" : "[%*d %d %*d %256s", &pid, proc) != 2)
+				continue;
 
-		if(ret != 2)
-			continue;
+			// Make sure our target is alive
+			if (kill(pid, 0))
+				continue;
 
-		ppid = parse_ppid(pid);
+			// Allow hiding sub-services of applications
+			char *colon = strchr(proc, ':');
+			if (colon)
+				*colon = '\0';
 
-		// Allow hiding sub-services of applications
-		char *colon = strchr(proc, ':');
-		if (colon)
-			*colon = '\0';
+			int hide = 0;
+			pthread_mutex_lock(&hide_lock);
+			char *line;
+			vec_for_each(hide_list, line) {
+				if (strcmp(proc, line) == 0) {
+					hide = 1;
+					break;
+				}
+			}
+			pthread_mutex_unlock(&hide_lock);
+			if (!hide)
+				continue;
 
-		// Critical region
-		pthread_mutex_lock(&hide_lock);
-		vec_for_each(hide_list, line) {
-			if (strcmp(proc, line) == 0) {
-				read_namespace(ppid, pns, sizeof(pns));
-				do {
-					read_namespace(pid, ns, sizeof(ns));
-					if (strcmp(ns, pns) == 0)
-						usleep(50);
-					else
-						break;
-				} while (1);
+			ppid = parse_ppid(pid);
+			read_namespace(ppid, pns, sizeof(pns));
+			do {
+				read_namespace(pid, ns, sizeof(ns));
+				if (strcmp(ns, pns) == 0)
+					usleep(50);
+				else
+					break;
+			} while (1);
 
-				// Send pause signal ASAP
-				if (kill(pid, SIGSTOP) == -1)
-					continue;
+			// Send pause signal ASAP
+			if (kill(pid, SIGSTOP) == -1)
+				continue;
 
-				// Restore the colon so we can log the actual process name
-				if (colon)
-					*colon = ':';
+			// Restore the colon so we can log the actual process name
+			if (colon)
+				*colon = ':';
 #ifdef MAGISK_DEBUG
-				LOGI("proc_monitor: %s (PID=[%d] ns=%s)(PPID=[%d] ns=%s)\n", proc, pid, ns + 4, ppid, pns + 4);
+			LOGI("proc_monitor: %s (PID=[%d] ns=%s)(PPID=[%d] ns=%s)\n",
+				 proc, pid, ns + 4, ppid, pns + 4);
 #else
-				LOGI("proc_monitor: %s\n", proc);
+			LOGI("proc_monitor: %s\n", proc);
 #endif
 
-				/*
-				 * The setns system call do not support multithread processes
-				 * We have to fork a new process, setns, then do the unmounts
-				 */
-				if (fork_dont_care() == 0)
-					hide_daemon(pid);
-
-				break;
-			}
+			/*
+			 * The setns system call do not support multithread processes
+			 * We have to fork a new process, setns, then do the unmounts
+			 */
+			if (fork_dont_care() == 0)
+				hide_daemon(pid);
 		}
-		pthread_mutex_unlock(&hide_lock);
+		// The other end EOF, restart the connection
 	}
 }
