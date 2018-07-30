@@ -1,7 +1,6 @@
 package com.topjohnwu.magisk.asyncs;
 
 import android.Manifest;
-import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.net.Uri;
@@ -10,10 +9,12 @@ import android.support.annotation.NonNull;
 import android.widget.Toast;
 
 import com.topjohnwu.magisk.FlashActivity;
-import com.topjohnwu.magisk.MagiskManager;
+import com.topjohnwu.magisk.Global;
 import com.topjohnwu.magisk.R;
+import com.topjohnwu.magisk.components.Activity;
 import com.topjohnwu.magisk.components.SnackbarMaker;
 import com.topjohnwu.magisk.utils.Const;
+import com.topjohnwu.magisk.utils.Download;
 import com.topjohnwu.magisk.utils.WebService;
 import com.topjohnwu.magisk.utils.ZipUtils;
 import com.topjohnwu.superuser.Shell;
@@ -45,7 +46,7 @@ public class ProcessRepoZip extends ParallelTask<Void, Object, Boolean> {
     public ProcessRepoZip(Activity context, String link, String filename, boolean install) {
         super(context);
         mLink = link;
-        mFile = new File(Const.EXTERNAL_PATH, filename);
+        mFile = new File(Download.EXTERNAL_PATH, Download.getLegalFilename(filename));
         mInstall = install;
         mHandler = new Handler();
     }
@@ -75,6 +76,11 @@ public class ProcessRepoZip extends ParallelTask<Void, Object, Boolean> {
     }
 
     @Override
+    protected Activity getActivity() {
+        return (Activity) super.getActivity();
+    }
+
+    @Override
     protected void onPreExecute() {
         Activity activity = getActivity();
         mFile.getParentFile().mkdirs();
@@ -87,15 +93,8 @@ public class ProcessRepoZip extends ParallelTask<Void, Object, Boolean> {
         if (activity == null) return null;
         try {
             // Request zip from Internet
-            HttpURLConnection conn;
-            do {
-                conn = WebService.request(mLink, null);
-                total = conn.getContentLength();
-                if (total < 0)
-                    conn.disconnect();
-                else
-                    break;
-            } while (true);
+            HttpURLConnection conn = WebService.mustRequest(mLink, null);
+            total = conn.getContentLength();
 
             // Temp files
             File temp1 = new File(activity.getCacheDir(), "1.zip");
@@ -149,15 +148,15 @@ public class ProcessRepoZip extends ParallelTask<Void, Object, Boolean> {
                 SnackbarMaker.showUri(activity, uri);
             }
         } else {
-            MagiskManager.toast(R.string.process_error, Toast.LENGTH_LONG);
+            Global.toast(R.string.process_error, Toast.LENGTH_LONG);
         }
         super.onPostExecute(result);
     }
 
     @Override
     public ParallelTask<Void, Object, Boolean> exec(Void... voids) {
-        com.topjohnwu.magisk.components.Activity.runWithPermission(
-                getActivity(), new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
+        getActivity().runWithPermission(
+                new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
                 () -> super.exec(voids));
         return this;
     }
@@ -170,7 +169,8 @@ public class ProcessRepoZip extends ParallelTask<Void, Object, Boolean> {
 
         private void updateDlProgress(int step) {
             progress += step;
-            progressDialog.setMessage(getActivity().getString(R.string.zip_download_msg, (int) (100 * (double) progress / total + 0.5)));
+            progressDialog.setMessage(getActivity().getString(R.string.zip_download_msg,
+                    (int) (100 * (double) progress / total + 0.5)));
         }
 
         @Override

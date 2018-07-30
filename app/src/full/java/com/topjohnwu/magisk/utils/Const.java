@@ -1,10 +1,9 @@
 package com.topjohnwu.magisk.utils;
 
-import android.os.Environment;
 import android.os.Process;
 
 import com.topjohnwu.magisk.BuildConfig;
-import com.topjohnwu.magisk.MagiskManager;
+import com.topjohnwu.magisk.Global;
 
 import java.io.File;
 import java.util.Arrays;
@@ -34,7 +33,6 @@ public class Const {
     public static final String BUSYBOX_PATH = "/sbin/.core/busybox";
     public static final String TMP_FOLDER_PATH = "/dev/tmp";
     public static final String MAGISK_LOG = "/cache/magisk.log";
-    public static final File EXTERNAL_PATH = new File(Environment.getExternalStorageDirectory(), "MagiskManager");
     public static final String MANAGER_CONFIGS = ".tmp.magisk.config";
 
     // Versions
@@ -42,13 +40,13 @@ public class Const {
     public static final int SNET_VER = 10;
 
     public static int MIN_MODULE_VER() {
-        return MagiskManager.get().magiskVersionCode >= MAGISK_VER.REMOVE_LEGACY_LINK ? 1500 : 1400;
+        return Global.magiskVersionCode >= MAGISK_VER.REMOVE_LEGACY_LINK ? 1500 : 1400;
     }
 
     /* A list of apps that should not be shown as hide-able */
     public static final List<String> HIDE_BLACKLIST =  Arrays.asList(
             "android",
-            MagiskManager.get().getPackageName(),
+            Global.MM().getPackageName(),
             "com.google.android.gms"
     );
 
@@ -107,7 +105,6 @@ public class Const {
         public static final String OPEN_SECTION = "section";
         public static final String INTENT_SET_FILENAME = "filename";
         public static final String INTENT_SET_LINK = "link";
-        public static final String INTENT_PERM = "perm_dialog";
         public static final String FLASH_ACTION = "action";
         public static final String FLASH_SET_BOOT = "boot";
 

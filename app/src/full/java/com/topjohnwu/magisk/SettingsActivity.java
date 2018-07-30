@@ -25,6 +25,7 @@ import com.topjohnwu.magisk.asyncs.HideManager;
 import com.topjohnwu.magisk.components.Activity;
 import com.topjohnwu.magisk.receivers.DownloadReceiver;
 import com.topjohnwu.magisk.utils.Const;
+import com.topjohnwu.magisk.utils.Download;
 import com.topjohnwu.magisk.utils.FingerprintHelper;
 import com.topjohnwu.magisk.utils.RootUtils;
 import com.topjohnwu.magisk.utils.Topic;
@@ -107,7 +108,7 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
             findPreference("clear").setOnPreferenceClickListener((pref) -> {
                 prefs.edit().remove(Const.Key.ETAG_KEY).apply();
                 mm.repoDB.clearRepo();
-                MagiskManager.toast(R.string.repo_cache_cleared, Toast.LENGTH_SHORT);
+                Global.toast(R.string.repo_cache_cleared, Toast.LENGTH_SHORT);
                 return true;
             });
 
@@ -158,7 +159,7 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
                 fingerprint.setSummary(R.string.disable_fingerprint);
             }
 
-            if (mm.magiskVersionCode >= Const.MAGISK_VER.MANAGER_HIDE) {
+            if (Global.magiskVersionCode >= Const.MAGISK_VER.MANAGER_HIDE) {
                 if (mm.getPackageName().equals(Const.ORIG_PKG_NAME)) {
                     hideManager.setOnPreferenceClickListener((pref) -> {
                         new HideManager(getActivity()).exec();
@@ -166,19 +167,24 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
                     });
                     generalCatagory.removePreference(restoreManager);
                 } else {
-                    if (Utils.checkNetworkStatus()) {
+                    if (Download.checkNetworkStatus(mm)) {
                         restoreManager.setOnPreferenceClickListener((pref) -> {
-                            Utils.dlAndReceive(
+                            Download.receive(
                                 getActivity(), new DownloadReceiver() {
                                     @Override
                                     public void onDownloadDone(Context context, Uri uri) {
                                         mm.dumpPrefs();
-                                        if (ShellUtils.fastCmdResult("pm install " + uri.getPath()))
+                                        Shell.su("cp " + uri.getPath() + " /data/local/tmp/manager.apk").exec();
+                                        if (ShellUtils.fastCmdResult("pm install /data/local/tmp/manager.apk")) {
+                                            Shell.su("rm -f /data/local/tmp/manager.apk").exec();
                                             RootUtils.uninstallPkg(context.getPackageName());
+                                            return;
+                                        }
+                                        Shell.su("rm -f /data/local/tmp/manager.apk").exec();
                                     }
                                 },
-                                mm.managerLink,
-                                Utils.fmt("MagiskManager-v%s.apk", mm.remoteManagerVersionString)
+                                Global.managerLink,
+                                Utils.fmt("MagiskManager-v%s.apk", Global.remoteManagerVersionString)
                             );
                             return true;
                         });
@@ -200,7 +206,7 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
             if (!Shell.rootAccess()) {
                 prefScreen.removePreference(magiskCategory);
                 generalCatagory.removePreference(hideManager);
-            } else if (mm.magiskVersionCode < Const.MAGISK_VER.UNIFIED) {
+            } else if (Global.magiskVersionCode < Const.MAGISK_VER.UNIFIED) {
                 prefScreen.removePreference(magiskCategory);
             }
         }
@@ -283,7 +289,7 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
                     new CheckUpdates().exec();
                     break;
                 case Const.Key.CHECK_UPDATES:
-                    mm.setupUpdateCheck();
+                    Utils.setupUpdateCheck();
                     break;
             }
             mm.loadConfig();

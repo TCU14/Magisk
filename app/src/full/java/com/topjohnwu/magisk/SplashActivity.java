@@ -14,6 +14,7 @@ import com.topjohnwu.magisk.components.Activity;
 import com.topjohnwu.magisk.database.RepoDatabaseHelper;
 import com.topjohnwu.magisk.receivers.ShortcutReceiver;
 import com.topjohnwu.magisk.utils.Const;
+import com.topjohnwu.magisk.utils.Download;
 import com.topjohnwu.magisk.utils.Utils;
 import com.topjohnwu.superuser.Shell;
 
@@ -24,10 +25,10 @@ public class SplashActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         MagiskManager mm = getMagiskManager();
+        // Force create a shell if not created yet
+        boolean root = Shell.rootAccess();
 
         mm.repoDB = new RepoDatabaseHelper(this);
-        mm.loadMagiskInfo();
-        mm.getDefaultInstallFlags();
         mm.loadPrefs();
 
         // Dynamic detect all locales
@@ -45,7 +46,7 @@ public class SplashActivity extends Activity {
 
         LoadModules loadModuleTask = new LoadModules();
 
-        if (Utils.checkNetworkStatus()) {
+        if (Download.checkNetworkStatus(this)) {
             // Fire update check
             new CheckUpdates().exec();
             // Add repo update check
@@ -53,9 +54,9 @@ public class SplashActivity extends Activity {
         }
 
         // Magisk working as expected
-        if (Shell.rootAccess() && mm.magiskVersionCode > 0) {
+        if (root && Global.magiskVersionCode > 0) {
             // Update check service
-            mm.setupUpdateCheck();
+            Utils.setupUpdateCheck();
             // Fire asynctasks
             loadModuleTask.exec();
         }
@@ -67,7 +68,7 @@ public class SplashActivity extends Activity {
 
         Intent intent = new Intent(this, MainActivity.class);
         intent.putExtra(Const.Key.OPEN_SECTION, getIntent().getStringExtra(Const.Key.OPEN_SECTION));
-        intent.putExtra(Const.Key.INTENT_PERM, getIntent().getStringExtra(Const.Key.INTENT_PERM));
+        intent.putExtra(Activity.INTENT_PERM, getIntent().getStringExtra(Activity.INTENT_PERM));
         startActivity(intent);
         finish();
     }
@@ -75,12 +76,12 @@ public class SplashActivity extends Activity {
     static class LoadLocale extends ParallelTask<Void, Void, Void> {
         @Override
         protected Void doInBackground(Void... voids) {
-            MagiskManager.get().locales = Utils.getAvailableLocale();
+            Global.MM().locales = Utils.getAvailableLocale();
             return null;
         }
         @Override
         protected void onPostExecute(Void aVoid) {
-            MagiskManager.get().localeDone.publish();
+            Global.MM().localeDone.publish();
         }
     }
 }

@@ -1,25 +1,21 @@
 package com.topjohnwu.magisk.utils;
 
-import android.Manifest;
-import android.app.DownloadManager;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
+import android.content.ComponentName;
 import android.content.Context;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.database.Cursor;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.support.annotation.StringRes;
-import android.widget.Toast;
 
+import com.topjohnwu.magisk.Global;
 import com.topjohnwu.magisk.MagiskManager;
 import com.topjohnwu.magisk.R;
-import com.topjohnwu.magisk.components.Activity;
-import com.topjohnwu.magisk.receivers.DownloadReceiver;
+import com.topjohnwu.magisk.services.UpdateCheckService;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -27,41 +23,6 @@ import java.util.List;
 import java.util.Locale;
 
 public class Utils {
-
-    public static boolean isDownloading = false;
-
-    public static void dlAndReceive(Context context, DownloadReceiver receiver, String link, String filename) {
-        if (isDownloading)
-            return;
-
-        Activity.runWithPermission(context,
-                new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE }, () -> {
-            File file = new File(Const.EXTERNAL_PATH, getLegalFilename(filename));
-
-            if ((!file.getParentFile().exists() && !file.getParentFile().mkdirs())
-                    || (file.exists() && !file.delete())) {
-                return;
-            }
-
-            MagiskManager.toast(context.getString(R.string.downloading_toast, filename), Toast.LENGTH_LONG);
-            isDownloading = true;
-
-            DownloadManager.Request request = new DownloadManager
-                    .Request(Uri.parse(link))
-                    .setDestinationUri(Uri.fromFile(file));
-
-            DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
-            receiver.setDownloadID(dm.enqueue(request)).setFile(file);
-            context.getApplicationContext().registerReceiver(receiver,
-                    new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
-        });
-    }
-
-    public static String getLegalFilename(CharSequence filename) {
-        return filename.toString().replace(" ", "_").replace("'", "").replace("\"", "")
-                .replace("$", "").replace("`", "").replace("*", "").replace("/", "_")
-                .replace("#", "").replace("@", "").replace("\\", "_");
-    }
 
     public static int getPrefsInt(SharedPreferences prefs, String key, int def) {
         return Integer.parseInt(prefs.getString(key, String.valueOf(def)));
@@ -93,15 +54,8 @@ public class Utils {
         return name;
     }
 
-    public static boolean checkNetworkStatus() {
-        ConnectivityManager manager = (ConnectivityManager)
-                MagiskManager.get().getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo networkInfo = manager.getActiveNetworkInfo();
-        return networkInfo != null && networkInfo.isConnected();
-    }
-
     public static String getLocaleString(Locale locale, @StringRes int id) {
-        Context context = MagiskManager.get();
+        Context context = Global.MM();
         Configuration config = context.getResources().getConfiguration();
         config.setLocale(locale);
         Context localizedContext = context.createConfigurationContext(config);
@@ -127,7 +81,7 @@ public class Utils {
         set.add(getLocaleString(locale, compareId));
 
         // Other locales
-        for (String s : MagiskManager.get().getAssets().getLocales()) {
+        for (String s : Global.MM().getAssets().getLocales()) {
             locale = Locale.forLanguageTag(s);
             if (set.add(getLocaleString(locale, compareId))) {
                 locales.add(locale);
@@ -140,7 +94,7 @@ public class Utils {
     }
 
     public static int dpInPx(int dp) {
-        Context context = MagiskManager.get();
+        Context context = Global.MM();
         float scale = context.getResources().getDisplayMetrics().density;
         return (int) (dp * scale + 0.5);
     }
@@ -155,6 +109,26 @@ public class Utils {
             return newString + "\n";
         } else {
             return newString;
+        }
+    }
+
+    public static void setupUpdateCheck() {
+        MagiskManager mm = Global.MM();
+        JobScheduler scheduler = (JobScheduler) mm.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+
+        if (mm.prefs.getBoolean(Const.Key.CHECK_UPDATES, true)) {
+            if (scheduler.getAllPendingJobs().isEmpty() ||
+                    Const.UPDATE_SERVICE_VER > mm.prefs.getInt(Const.Key.UPDATE_SERVICE_VER, -1)) {
+                ComponentName service = new ComponentName(mm, UpdateCheckService.class);
+                JobInfo info = new JobInfo.Builder(Const.ID.UPDATE_SERVICE_ID, service)
+                        .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                        .setPersisted(true)
+                        .setPeriodic(8 * 60 * 60 * 1000)
+                        .build();
+                scheduler.schedule(info);
+            }
+        } else {
+            scheduler.cancel(Const.UPDATE_SERVICE_VER);
         }
     }
 }

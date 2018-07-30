@@ -4,16 +4,20 @@ import android.app.Activity;
 import android.app.ProgressDialog;
 import android.net.Uri;
 import android.os.Build;
+import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.Toast;
 
+import com.topjohnwu.magisk.Global;
 import com.topjohnwu.magisk.FlashActivity;
 import com.topjohnwu.magisk.MagiskManager;
 import com.topjohnwu.magisk.R;
 import com.topjohnwu.magisk.container.TarEntry;
 import com.topjohnwu.magisk.utils.Const;
+import com.topjohnwu.magisk.utils.Download;
 import com.topjohnwu.magisk.utils.Utils;
+import com.topjohnwu.magisk.utils.WebService;
 import com.topjohnwu.magisk.utils.ZipUtils;
 import com.topjohnwu.superuser.Shell;
 import com.topjohnwu.superuser.ShellUtils;
@@ -31,9 +35,11 @@ import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.util.Arrays;
 import java.util.List;
 
@@ -44,7 +50,7 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
     private static final int FIX_ENV_MODE = 2;
     public static final int SECOND_SLOT_MODE = 3;
 
-    private Uri bootUri, mZip;
+    private Uri bootUri;
     private List<String> console, logs;
     private String mBoot;
     private int mode;
@@ -52,22 +58,21 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
     private ProgressDialog dialog;
     private MagiskManager mm;
 
-    public InstallMagisk(Activity context, Uri zip) {
+    public InstallMagisk(Activity context) {
         super(context);
-        mZip = zip;
-        mm = MagiskManager.get();
+        mm = Global.MM();
         mode = FIX_ENV_MODE;
     }
 
-    public InstallMagisk(Activity context, List<String> console, List<String> logs, Uri zip, int mode) {
-        this(context, zip);
+    public InstallMagisk(Activity context, List<String> console, List<String> logs, int mode) {
+        this(context);
         this.console = console;
         this.logs = logs;
         this.mode = mode;
     }
 
-    public InstallMagisk(FlashActivity context, List<String> console, List<String> logs, Uri zip, Uri boot) {
-        this(context, console, logs, zip, PATCH_MODE);
+    public InstallMagisk(FlashActivity context, List<String> console, List<String> logs, Uri boot) {
+        this(context, console, logs, PATCH_MODE);
         bootUri = boot;
     }
 
@@ -80,23 +85,69 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
         }
     }
 
+    private class ProgressStream extends FilterInputStream {
+
+        private int prev = -1;
+        private int progress = 0;
+        private int total;
+
+        private ProgressStream(HttpURLConnection conn) throws IOException {
+            super(conn.getInputStream());
+            total = conn.getContentLength();
+        }
+
+        private void update(int step) {
+            progress += step;
+            int curr = (int) (10 * (double) progress / total);
+            if (prev != curr) {
+                prev = curr;
+                console.add("... " + prev * 10 + "%");
+            }
+        }
+
+        @Override
+        public int read() throws IOException {
+            int b = super.read();
+            if (b > 0)
+                update(1);
+            return b;
+        }
+
+        @Override
+        public int read(@NonNull byte[] b) throws IOException {
+            return read(b, 0, b.length);
+        }
+
+        @Override
+        public int read(@NonNull byte[] b, int off, int len) throws IOException {
+            int step = super.read(b, off, len);
+            if (step > 0)
+                update(step);
+            return step;
+        }
+    }
+
     private void extractFiles(String arch) throws IOException {
+        console.add("- Downloading zip");
+        String filename = Utils.fmt("Magisk-v%s(%d).zip",
+                Global.remoteMagiskVersionString, Global.remoteMagiskVersionCode);
+        HttpURLConnection conn = WebService.mustRequest(Global.magiskLink, null);
+        BufferedInputStream buf = new BufferedInputStream(new ProgressStream(conn));
+        buf.mark(Integer.MAX_VALUE);
+        try (OutputStream out = new FileOutputStream(new File(Download.EXTERNAL_PATH, filename))) {
+            ShellUtils.pump(buf, out);
+            buf.reset();
+        }
+        conn.disconnect();
         console.add("- Extracting files");
-        try (InputStream in = mm.getContentResolver().openInputStream(mZip)) {
-            if (in == null) throw new FileNotFoundException();
-            BufferedInputStream buf = new BufferedInputStream(in);
-            buf.mark(Integer.MAX_VALUE);
-            ZipUtils.unzip(buf, installDir, arch + "/", true);
-            buf.reset();
-            ZipUtils.unzip(buf, installDir, "common/", true);
-            buf.reset();
-            ZipUtils.unzip(buf, installDir, "chromeos/", false);
-            buf.reset();
-            ZipUtils.unzip(buf, installDir, "META-INF/com/google/android/update-binary", true);
-            buf.close();
-        } catch (FileNotFoundException e) {
-            console.add("! Invalid Uri");
-            throw e;
+        try (InputStream in = buf) {
+            ZipUtils.unzip(in, installDir, arch + "/", true);
+            in.reset();
+            ZipUtils.unzip(in, installDir, "common/", true);
+            in.reset();
+            ZipUtils.unzip(in, installDir, "chromeos/", false);
+            in.reset();
+            ZipUtils.unzip(in, installDir, "META-INF/com/google/android/update-binary", true);
         } catch (IOException e) {
             console.add("! Cannot unzip zip");
             throw e;
@@ -154,7 +205,7 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
         // Patch boot image
         if (!Shell.sh("cd " + installDir, Utils.fmt(
                 "KEEPFORCEENCRYPT=%b KEEPVERITY=%b sh update-binary indep boot_patch.sh %s",
-                mm.keepEnc, mm.keepVerity, mBoot))
+                Global.keepEnc, Global.keepVerity, mBoot))
                 .to(console, logs).exec().isSuccess())
             return null;
 
@@ -180,7 +231,7 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
     private void outputBoot(File patched) throws IOException {
         switch (mode) {
             case PATCH_MODE:
-                File dest = new File(Const.EXTERNAL_PATH, "patched_boot" + mm.bootFormat);
+                File dest = new File(Download.EXTERNAL_PATH, "patched_boot" + mm.bootFormat);
                 dest.getParentFile().mkdirs();
                 OutputStream out;
                 switch (mm.bootFormat) {
@@ -208,7 +259,7 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
             case DIRECT_MODE:
                 Shell.Job job = Shell.su(Utils.fmt("direct_install %s %s %s", patched, mBoot, installDir))
                         .to(console, logs);
-                if (!mm.keepVerity)
+                if (!Global.keepVerity)
                     job.add("find_dtbo_image", "patch_dtbo_image");
                 job.exec();
                 break;
@@ -281,7 +332,7 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
         List<String> abis = Arrays.asList(Build.SUPPORTED_ABIS);
         String arch;
 
-        if (mm.remoteMagiskVersionCode >= Const.MAGISK_VER.SEPOL_REFACTOR) {
+        if (Global.remoteMagiskVersionCode >= Const.MAGISK_VER.SEPOL_REFACTOR) {
             // 32-bit only
             if (abis.contains("x86")) arch = "x86";
             else arch = "arm";
@@ -318,7 +369,7 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
     protected void onPostExecute(Boolean result) {
         if (mode == FIX_ENV_MODE) {
             dialog.dismiss();
-            MagiskManager.toast(result ? R.string.setup_done : R.string.setup_fail, Toast.LENGTH_LONG);
+            Global.toast(result ? R.string.setup_done : R.string.setup_fail, Toast.LENGTH_LONG);
         } else {
             // Running in FlashActivity
             FlashActivity activity = (FlashActivity) getActivity();
