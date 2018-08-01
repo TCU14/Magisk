@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.widget.RecyclerView;
@@ -16,22 +17,22 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import com.topjohnwu.magisk.adapters.ModulesAdapter;
-import com.topjohnwu.magisk.asyncs.LoadModules;
-import com.topjohnwu.magisk.components.Fragment;
+import com.topjohnwu.magisk.components.BaseFragment;
 import com.topjohnwu.magisk.container.Module;
-import com.topjohnwu.magisk.utils.Const;
 import com.topjohnwu.magisk.utils.Topic;
+import com.topjohnwu.magisk.utils.Utils;
 import com.topjohnwu.superuser.Shell;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 import butterknife.Unbinder;
 
-public class ModulesFragment extends Fragment implements Topic.Subscriber {
+public class ModulesFragment extends BaseFragment implements Topic.Subscriber {
 
     private Unbinder unbinder;
     @BindView(R.id.swipeRefreshLayout) SwipeRefreshLayout mSwipeRefreshLayout;
@@ -50,14 +51,14 @@ public class ModulesFragment extends Fragment implements Topic.Subscriber {
 
     @Nullable
     @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_modules, container, false);
         unbinder = ButterKnife.bind(this, view);
         setHasOptionsMenu(true);
 
         mSwipeRefreshLayout.setOnRefreshListener(() -> {
             recyclerView.setVisibility(View.GONE);
-            new LoadModules().exec();
+            Utils.loadModules();
         });
 
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -72,19 +73,19 @@ public class ModulesFragment extends Fragment implements Topic.Subscriber {
             }
         });
 
-        getActivity().setTitle(R.string.modules);
+        requireActivity().setTitle(R.string.modules);
 
         return view;
     }
 
     @Override
-    public void onTopicPublished(Topic topic) {
-        updateUI();
+    public int[] getSubscribedTopics() {
+        return new int[] {Topic.MODULE_LOAD_DONE};
     }
 
     @Override
-    public Topic[] getSubscription() {
-        return new Topic[] { getApplication().moduleLoadDone };
+    public void onPublish(int topic, Object[] result) {
+        updateUI((Map<String, Module>) result[0]);
     }
 
     @Override
@@ -128,9 +129,9 @@ public class ModulesFragment extends Fragment implements Topic.Subscriber {
         }
     }
 
-    private void updateUI() {
+    private void updateUI(Map<String, Module> moduleMap) {
         listModules.clear();
-        listModules.addAll(getApplication().moduleMap.values());
+        listModules.addAll(moduleMap.values());
         if (listModules.size() == 0) {
             emptyRv.setVisibility(View.VISIBLE);
             recyclerView.setVisibility(View.GONE);

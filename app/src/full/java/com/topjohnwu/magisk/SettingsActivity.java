@@ -21,12 +21,12 @@ import android.widget.EditText;
 import android.widget.Toast;
 
 import com.topjohnwu.magisk.asyncs.CheckUpdates;
-import com.topjohnwu.magisk.asyncs.HideManager;
-import com.topjohnwu.magisk.components.Activity;
+import com.topjohnwu.magisk.asyncs.PatchAPK;
+import com.topjohnwu.magisk.components.BaseActivity;
 import com.topjohnwu.magisk.receivers.DownloadReceiver;
-import com.topjohnwu.magisk.utils.Const;
 import com.topjohnwu.magisk.utils.Download;
 import com.topjohnwu.magisk.utils.FingerprintHelper;
+import com.topjohnwu.magisk.utils.LocaleManager;
 import com.topjohnwu.magisk.utils.RootUtils;
 import com.topjohnwu.magisk.utils.Topic;
 import com.topjohnwu.magisk.utils.Utils;
@@ -39,7 +39,7 @@ import java.util.Locale;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
-public class SettingsActivity extends Activity implements Topic.Subscriber {
+public class SettingsActivity extends BaseActivity implements Topic.Subscriber {
 
     @BindView(R.id.toolbar) Toolbar toolbar;
 
@@ -73,17 +73,18 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
     }
 
     @Override
-    public void onTopicPublished(Topic topic) {
-        recreate();
+    public int[] getSubscribedTopics() {
+        return new int[] {Topic.RELOAD_ACTIVITY};
     }
 
     @Override
-    public Topic[] getSubscription() {
-        return new Topic[] { getMagiskManager().reloadActivity };
+    public void onPublish(int topic, Object[] result) {
+        recreate();
     }
 
     public static class SettingsFragment extends PreferenceFragmentCompat
-            implements SharedPreferences.OnSharedPreferenceChangeListener, Topic.Subscriber {
+            implements SharedPreferences.OnSharedPreferenceChangeListener,
+            Topic.Subscriber, Topic.AutoSubscriber {
 
         private SharedPreferences prefs;
         private PreferenceScreen prefScreen;
@@ -96,7 +97,7 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             setPreferencesFromResource(R.xml.app_settings, rootKey);
-            mm = Utils.getMagiskManager(getActivity());
+            mm = Data.MM();
             prefs = mm.prefs;
             prefScreen = getPreferenceScreen();
 
@@ -108,7 +109,7 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
             findPreference("clear").setOnPreferenceClickListener((pref) -> {
                 prefs.edit().remove(Const.Key.ETAG_KEY).apply();
                 mm.repoDB.clearRepo();
-                Global.toast(R.string.repo_cache_cleared, Toast.LENGTH_SHORT);
+                Utils.toast(R.string.repo_cache_cleared, Toast.LENGTH_SHORT);
                 return true;
             });
 
@@ -123,12 +124,12 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
             SwitchPreference fingerprint = (SwitchPreference) findPreference(Const.Key.SU_FINGERPRINT);
 
             updateChannel.setOnPreferenceChangeListener((pref, o) -> {
-                mm.updateChannel = Integer.parseInt((String) o);
-                if (mm.updateChannel == Const.Value.CUSTOM_CHANNEL) {
-                    View v = LayoutInflater.from(getActivity()).inflate(R.layout.custom_channel_dialog, null);
+                Data.updateChannel = Integer.parseInt((String) o);
+                if (Data.updateChannel == Const.Value.CUSTOM_CHANNEL) {
+                    View v = LayoutInflater.from(requireActivity()).inflate(R.layout.custom_channel_dialog, null);
                     EditText url = v.findViewById(R.id.custom_url);
                     url.setText(mm.prefs.getString(Const.Key.CUSTOM_CHANNEL, ""));
-                    new AlertDialog.Builder(getActivity())
+                    new AlertDialog.Builder(requireActivity())
                             .setTitle(R.string.settings_update_custom)
                             .setView(v)
                             .setPositiveButton(R.string.ok, (d, i) ->
@@ -159,10 +160,10 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
                 fingerprint.setSummary(R.string.disable_fingerprint);
             }
 
-            if (Global.magiskVersionCode >= Const.MAGISK_VER.MANAGER_HIDE) {
+            if (Data.magiskVersionCode >= Const.MAGISK_VER.MANAGER_HIDE) {
                 if (mm.getPackageName().equals(Const.ORIG_PKG_NAME)) {
                     hideManager.setOnPreferenceClickListener((pref) -> {
-                        new HideManager(getActivity()).exec();
+                        PatchAPK.hideManager(requireActivity());
                         return true;
                     });
                     generalCatagory.removePreference(restoreManager);
@@ -173,7 +174,7 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
                                 getActivity(), new DownloadReceiver() {
                                     @Override
                                     public void onDownloadDone(Context context, Uri uri) {
-                                        mm.dumpPrefs();
+                                        Data.exportPrefs();
                                         Shell.su("cp " + uri.getPath() + " /data/local/tmp/manager.apk").exec();
                                         if (ShellUtils.fastCmdResult("pm install /data/local/tmp/manager.apk")) {
                                             Shell.su("rm -f /data/local/tmp/manager.apk").exec();
@@ -183,8 +184,8 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
                                         Shell.su("rm -f /data/local/tmp/manager.apk").exec();
                                     }
                                 },
-                                Global.managerLink,
-                                Utils.fmt("MagiskManager-v%s.apk", Global.remoteManagerVersionString)
+                                Data.managerLink,
+                                Utils.fmt("MagiskManager-v%s.apk", Data.remoteManagerVersionString)
                             );
                             return true;
                         });
@@ -199,44 +200,44 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
             }
 
             if (!Shell.rootAccess() || (Const.USER_ID > 0 &&
-                    mm.multiuserMode == Const.Value.MULTIUSER_MODE_OWNER_MANAGED)) {
+                    Data.multiuserMode == Const.Value.MULTIUSER_MODE_OWNER_MANAGED)) {
                 prefScreen.removePreference(suCategory);
             }
 
             if (!Shell.rootAccess()) {
                 prefScreen.removePreference(magiskCategory);
                 generalCatagory.removePreference(hideManager);
-            } else if (Global.magiskVersionCode < Const.MAGISK_VER.UNIFIED) {
+            } else if (Data.magiskVersionCode < Const.MAGISK_VER.UNIFIED) {
                 prefScreen.removePreference(magiskCategory);
             }
         }
 
         private void setLocalePreference(ListPreference lp) {
-            CharSequence[] entries = new CharSequence[mm.locales.size() + 1];
-            CharSequence[] entryValues = new CharSequence[mm.locales.size() + 1];
-            entries[0] = Utils.getLocaleString(MagiskManager.defaultLocale, R.string.system_default);
+            CharSequence[] entries = new CharSequence[LocaleManager.locales.size() + 1];
+            CharSequence[] entryValues = new CharSequence[LocaleManager.locales.size() + 1];
+            entries[0] = LocaleManager.getString(LocaleManager.defaultLocale, R.string.system_default);
             entryValues[0] = "";
             int i = 1;
-            for (Locale locale : mm.locales) {
+            for (Locale locale : LocaleManager.locales) {
                 entries[i] = locale.getDisplayName(locale);
                 entryValues[i++] = locale.toLanguageTag();
             }
             lp.setEntries(entries);
             lp.setEntryValues(entryValues);
-            lp.setSummary(MagiskManager.locale.getDisplayName(MagiskManager.locale));
+            lp.setSummary(LocaleManager.locale.getDisplayName(LocaleManager.locale));
         }
 
         @Override
         public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
             prefs.registerOnSharedPreferenceChangeListener(this);
-            subscribeTopics();
+            Topic.subscribe(this);
             return super.onCreateView(inflater, container, savedInstanceState);
         }
 
         @Override
         public void onDestroyView() {
             prefs.unregisterOnSharedPreferenceChangeListener(this);
-            unsubscribeTopics();
+            Topic.unsubscribe(this);
             super.onDestroyView();
         }
 
@@ -245,8 +246,8 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
 
             switch (key) {
                 case Const.Key.DARK_THEME:
-                    mm.isDarkTheme = prefs.getBoolean(key, false);
-                    mm.reloadActivity.publish(false);
+                    Data.isDarkTheme = prefs.getBoolean(key, false);
+                    Topic.publish(false, Topic.RELOAD_ACTIVITY);
                     return;
                 case Const.Key.COREONLY:
                     if (prefs.getBoolean(key, false)) {
@@ -282,45 +283,45 @@ public class SettingsActivity extends Activity implements Topic.Subscriber {
                     mm.mDB.setSettings(key, Utils.getPrefsInt(prefs, key));
                     break;
                 case Const.Key.LOCALE:
-                    mm.setLocale();
-                    mm.reloadActivity.publish(false);
+                    LocaleManager.setLocale(mm);
+                    Topic.publish(false, Topic.RELOAD_ACTIVITY);
                     break;
                 case Const.Key.UPDATE_CHANNEL:
-                    new CheckUpdates().exec();
+                    CheckUpdates.check();
                     break;
                 case Const.Key.CHECK_UPDATES:
                     Utils.setupUpdateCheck();
                     break;
             }
-            mm.loadConfig();
+            Data.loadConfig();
             setSummary();
         }
 
         private void setSummary() {
             updateChannel.setSummary(getResources()
-                    .getStringArray(R.array.update_channel)[mm.updateChannel]);
+                    .getStringArray(R.array.update_channel)[Data.updateChannel]);
             suAccess.setSummary(getResources()
-                    .getStringArray(R.array.su_access)[mm.suAccessState]);
+                    .getStringArray(R.array.su_access)[Data.suAccessState]);
             autoRes.setSummary(getResources()
-                    .getStringArray(R.array.auto_response)[mm.suResponseType]);
+                    .getStringArray(R.array.auto_response)[Data.suResponseType]);
             suNotification.setSummary(getResources()
-                    .getStringArray(R.array.su_notification)[mm.suNotificationType]);
+                    .getStringArray(R.array.su_notification)[Data.suNotificationType]);
             requestTimeout.setSummary(
                     getString(R.string.request_timeout_summary, prefs.getString(Const.Key.SU_REQUEST_TIMEOUT, "10")));
             multiuserMode.setSummary(getResources()
-                    .getStringArray(R.array.multiuser_summary)[mm.multiuserMode]);
+                    .getStringArray(R.array.multiuser_summary)[Data.multiuserMode]);
             namespaceMode.setSummary(getResources()
-                    .getStringArray(R.array.namespace_summary)[mm.suNamespaceMode]);
+                    .getStringArray(R.array.namespace_summary)[Data.suNamespaceMode]);
         }
 
         @Override
-        public void onTopicPublished(Topic topic) {
+        public void onPublish(int topic, Object[] result) {
             setLocalePreference((ListPreference) findPreference(Const.Key.LOCALE));
         }
 
         @Override
-        public Topic[] getSubscription() {
-            return new Topic[] { mm.localeDone };
+        public int[] getSubscribedTopics() {
+            return new int[] {Topic.LOCAL_FETCH_DONE};
         }
     }
 

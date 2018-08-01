@@ -3,8 +3,7 @@ package com.topjohnwu.magisk.container;
 import android.content.ContentValues;
 import android.database.Cursor;
 
-import com.topjohnwu.magisk.MagiskManager;
-import com.topjohnwu.magisk.utils.Const;
+import com.topjohnwu.magisk.Const;
 import com.topjohnwu.magisk.utils.Logger;
 import com.topjohnwu.magisk.utils.Utils;
 import com.topjohnwu.magisk.utils.WebService;
@@ -76,8 +75,7 @@ public class Repo extends BaseModule {
     }
 
     public String getLastUpdateString() {
-        return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM,
-                MagiskManager.locale).format(mLastUpdate);
+        return DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.MEDIUM).format(mLastUpdate);
     }
 
     public Date getLastUpdate() {

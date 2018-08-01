@@ -11,12 +11,13 @@ import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.widget.Toast;
 
-import com.topjohnwu.magisk.Global;
+import com.topjohnwu.magisk.Const;
+import com.topjohnwu.magisk.Data;
 import com.topjohnwu.magisk.MagiskManager;
 import com.topjohnwu.magisk.R;
 import com.topjohnwu.magisk.container.Policy;
 import com.topjohnwu.magisk.container.SuLogEntry;
-import com.topjohnwu.magisk.utils.Const;
+import com.topjohnwu.magisk.utils.LocaleManager;
 import com.topjohnwu.magisk.utils.Utils;
 import com.topjohnwu.superuser.Shell;
 import com.topjohnwu.superuser.io.SuFile;
@@ -75,10 +76,10 @@ public class MagiskDatabaseHelper {
             }
             // Cleanup
             Shell.su("db_clean " + Const.USER_ID).exec();
-            if (Global.magiskVersionCode < Const.MAGISK_VER.FBE_AWARE) {
+            if (Data.magiskVersionCode < Const.MAGISK_VER.FBE_AWARE) {
                 // Super old legacy mode
                 return mm.openOrCreateDatabase("su.db", Context.MODE_PRIVATE, null);
-            } else if (Global.magiskVersionCode < Const.MAGISK_VER.HIDDEN_PATH) {
+            } else if (Data.magiskVersionCode < Const.MAGISK_VER.HIDDEN_PATH) {
                 // Legacy mode with FBE aware
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     de.moveDatabaseFrom(mm, "su.db");
@@ -89,7 +90,7 @@ public class MagiskDatabaseHelper {
                 final SuFile GLOBAL_DB = new SuFile("/data/adb/magisk.db");
                 mm.deleteDatabase("su.db");
                 de.deleteDatabase("su.db");
-                if (Global.magiskVersionCode < Const.MAGISK_VER.SEPOL_REFACTOR) {
+                if (Data.magiskVersionCode < Const.MAGISK_VER.SEPOL_REFACTOR) {
                     // We need some additional policies on old versions
                     Shell.su("db_sepatch").exec();
                 }
@@ -123,7 +124,7 @@ public class MagiskDatabaseHelper {
                     POLICY_TABLE, POLICY_TABLE));
             db.execSQL(Utils.fmt("DROP TABLE %s_old", POLICY_TABLE));
 
-            Global.MM().deleteDatabase("sulog.db");
+            Data.MM().deleteDatabase("sulog.db");
             ++oldVersion;
         }
         if (oldVersion == 2) {
@@ -142,7 +143,7 @@ public class MagiskDatabaseHelper {
 
     // Remove everything, we do not support downgrade
     public void onDowngrade(SQLiteDatabase db) {
-        Global.toast(R.string.su_db_corrupt, Toast.LENGTH_LONG);
+        Utils.toast(R.string.su_db_corrupt, Toast.LENGTH_LONG);
         db.execSQL("DROP TABLE IF EXISTS " + POLICY_TABLE);
         db.execSQL("DROP TABLE IF EXISTS " + LOG_TABLE);
         db.execSQL("DROP TABLE IF EXISTS " + SETTINGS_TABLE);
@@ -174,7 +175,7 @@ public class MagiskDatabaseHelper {
         // Clear outdated policies
         db.delete(POLICY_TABLE, Utils.fmt("until > 0 AND until < %d", System.currentTimeMillis() / 1000), null);
         // Clear outdated logs
-        db.delete(LOG_TABLE, Utils.fmt("time < %d", System.currentTimeMillis() - Global.MM().suLogTimeout * 86400000), null);
+        db.delete(LOG_TABLE, Utils.fmt("time < %d", System.currentTimeMillis() - Data.suLogTimeout * 86400000), null);
     }
 
     public void deletePolicy(Policy policy) {
@@ -236,7 +237,7 @@ public class MagiskDatabaseHelper {
             String dateString = null, newString;
             while (c.moveToNext()) {
                 Date date = new Date(c.getLong(c.getColumnIndex("time")));
-                newString = DateFormat.getDateInstance(DateFormat.MEDIUM, MagiskManager.locale).format(date);
+                newString = DateFormat.getDateInstance(DateFormat.MEDIUM, LocaleManager.locale).format(date);
                 if (!TextUtils.equals(dateString, newString)) {
                     dateString = newString;
                     list = new ArrayList<>();

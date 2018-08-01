@@ -7,32 +7,34 @@ import android.os.Build;
 import android.os.Bundle;
 
 import com.topjohnwu.magisk.asyncs.CheckUpdates;
-import com.topjohnwu.magisk.asyncs.LoadModules;
-import com.topjohnwu.magisk.asyncs.ParallelTask;
 import com.topjohnwu.magisk.asyncs.UpdateRepos;
-import com.topjohnwu.magisk.components.Activity;
+import com.topjohnwu.magisk.components.BaseActivity;
 import com.topjohnwu.magisk.database.RepoDatabaseHelper;
 import com.topjohnwu.magisk.receivers.ShortcutReceiver;
-import com.topjohnwu.magisk.utils.Const;
 import com.topjohnwu.magisk.utils.Download;
+import com.topjohnwu.magisk.utils.LocaleManager;
 import com.topjohnwu.magisk.utils.Utils;
 import com.topjohnwu.superuser.Shell;
 
-public class SplashActivity extends Activity {
+public class SplashActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        MagiskManager mm = getMagiskManager();
-        // Force create a shell if not created yet
-        boolean root = Shell.rootAccess();
+        // Magisk working as expected
+        if (Shell.rootAccess() && Data.magiskVersionCode > 0) {
+            // Update check service
+            Utils.setupUpdateCheck();
+            // Load modules
+            Utils.loadModules();
+        }
 
         mm.repoDB = new RepoDatabaseHelper(this);
-        mm.loadPrefs();
+        Data.importPrefs();
 
         // Dynamic detect all locales
-        new LoadLocale().exec();
+        LocaleManager.loadAvailableLocales();
 
         // Create notification channel on Android O
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -44,44 +46,22 @@ public class SplashActivity extends Activity {
         // Setup shortcuts
         sendBroadcast(new Intent(this, ShortcutReceiver.class));
 
-        LoadModules loadModuleTask = new LoadModules();
-
         if (Download.checkNetworkStatus(this)) {
             // Fire update check
-            new CheckUpdates().exec();
-            // Add repo update check
-            loadModuleTask.setCallBack(() -> new UpdateRepos(false).exec());
-        }
-
-        // Magisk working as expected
-        if (root && Global.magiskVersionCode > 0) {
-            // Update check service
-            Utils.setupUpdateCheck();
-            // Fire asynctasks
-            loadModuleTask.exec();
+            CheckUpdates.check();
+            // Repo update check
+            new UpdateRepos().exec();
         }
 
         // Write back default values
-        mm.writeConfig();
+        Data.writeConfig();
 
         mm.hasInit = true;
 
         Intent intent = new Intent(this, MainActivity.class);
         intent.putExtra(Const.Key.OPEN_SECTION, getIntent().getStringExtra(Const.Key.OPEN_SECTION));
-        intent.putExtra(Activity.INTENT_PERM, getIntent().getStringExtra(Activity.INTENT_PERM));
+        intent.putExtra(BaseActivity.INTENT_PERM, getIntent().getStringExtra(BaseActivity.INTENT_PERM));
         startActivity(intent);
         finish();
-    }
-
-    static class LoadLocale extends ParallelTask<Void, Void, Void> {
-        @Override
-        protected Void doInBackground(Void... voids) {
-            Global.MM().locales = Utils.getAvailableLocale();
-            return null;
-        }
-        @Override
-        protected void onPostExecute(Void aVoid) {
-            Global.MM().localeDone.publish();
-        }
     }
 }

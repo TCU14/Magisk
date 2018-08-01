@@ -5,22 +5,22 @@ import android.app.job.JobScheduler;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.res.Configuration;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.provider.OpenableColumns;
-import android.support.annotation.StringRes;
+import android.widget.Toast;
 
-import com.topjohnwu.magisk.Global;
+import com.topjohnwu.magisk.Const;
+import com.topjohnwu.magisk.Data;
 import com.topjohnwu.magisk.MagiskManager;
-import com.topjohnwu.magisk.R;
+import com.topjohnwu.magisk.container.Module;
+import com.topjohnwu.magisk.container.ValueSortedMap;
 import com.topjohnwu.magisk.services.UpdateCheckService;
+import com.topjohnwu.superuser.io.SuFile;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class Utils {
 
@@ -30,10 +30,6 @@ public class Utils {
 
     public static int getPrefsInt(SharedPreferences prefs, String key) {
         return getPrefsInt(prefs, key, 0);
-    }
-
-    public static MagiskManager getMagiskManager(Context context) {
-        return (MagiskManager) context.getApplicationContext();
     }
 
     public static String getNameFromUri(Context context, Uri uri) {
@@ -54,48 +50,8 @@ public class Utils {
         return name;
     }
 
-    public static String getLocaleString(Locale locale, @StringRes int id) {
-        Context context = Global.MM();
-        Configuration config = context.getResources().getConfiguration();
-        config.setLocale(locale);
-        Context localizedContext = context.createConfigurationContext(config);
-        return localizedContext.getString(id);
-    }
-
-    public static List<Locale> getAvailableLocale() {
-        List<Locale> locales = new ArrayList<>();
-        HashSet<String> set = new HashSet<>();
-        Locale locale;
-
-        @StringRes int compareId = R.string.download_file_error;
-
-        // Add default locale
-        locales.add(Locale.ENGLISH);
-        set.add(getLocaleString(Locale.ENGLISH, compareId));
-
-        // Add some special locales
-        locales.add(Locale.TAIWAN);
-        set.add(getLocaleString(Locale.TAIWAN, compareId));
-        locale = new Locale("pt", "BR");
-        locales.add(locale);
-        set.add(getLocaleString(locale, compareId));
-
-        // Other locales
-        for (String s : Global.MM().getAssets().getLocales()) {
-            locale = Locale.forLanguageTag(s);
-            if (set.add(getLocaleString(locale, compareId))) {
-                locales.add(locale);
-            }
-        }
-
-        Collections.sort(locales, (l1, l2) -> l1.getDisplayName(l1).compareTo(l2.getDisplayName(l2)));
-
-        return locales;
-    }
-
     public static int dpInPx(int dp) {
-        Context context = Global.MM();
-        float scale = context.getResources().getDisplayMetrics().density;
+        float scale = Data.MM().getResources().getDisplayMetrics().density;
         return (int) (dp * scale + 0.5);
     }
 
@@ -113,7 +69,7 @@ public class Utils {
     }
 
     public static void setupUpdateCheck() {
-        MagiskManager mm = Global.MM();
+        MagiskManager mm = Data.MM();
         JobScheduler scheduler = (JobScheduler) mm.getSystemService(Context.JOB_SCHEDULER_SERVICE);
 
         if (mm.prefs.getBoolean(Const.Key.CHECK_UPDATES, true)) {
@@ -130,5 +86,28 @@ public class Utils {
         } else {
             scheduler.cancel(Const.UPDATE_SERVICE_VER);
         }
+    }
+
+    public static void toast(CharSequence msg, int duration) {
+        Data.mainHandler.post(() -> Toast.makeText(Data.MM(), msg, duration).show());
+    }
+
+    public static void toast(int resId, int duration) {
+        Data.mainHandler.post(() -> Toast.makeText(Data.MM(), resId, duration).show());
+    }
+
+    public static void loadModules() {
+        Topic.reset(Topic.MODULE_LOAD_DONE);
+        AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
+            Map<String, Module> moduleMap = new ValueSortedMap<>();
+            SuFile path = new SuFile(Const.MAGISK_PATH);
+            String[] modules = path.list(
+                    (file, name) -> !name.equals("lost+found") && !name.equals(".core"));
+            for (String name : modules) {
+                Module module = new Module(Const.MAGISK_PATH + "/" + name);
+                moduleMap.put(module.getId(), module);
+            }
+            Topic.publish(Topic.MODULE_LOAD_DONE, moduleMap);
+        });
     }
 }

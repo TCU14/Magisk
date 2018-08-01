@@ -4,11 +4,11 @@ import android.app.Activity;
 import android.net.Uri;
 import android.view.View;
 
+import com.topjohnwu.magisk.Const;
+import com.topjohnwu.magisk.Data;
 import com.topjohnwu.magisk.FlashActivity;
-import com.topjohnwu.magisk.Global;
 import com.topjohnwu.magisk.MagiskManager;
 import com.topjohnwu.magisk.components.SnackbarMaker;
-import com.topjohnwu.magisk.utils.Const;
 import com.topjohnwu.magisk.utils.Utils;
 import com.topjohnwu.magisk.utils.ZipUtils;
 import com.topjohnwu.superuser.Shell;
@@ -45,7 +45,7 @@ public class FlashZip extends ParallelTask<Void, Void, Integer> {
 
     @Override
     protected Integer doInBackground(Void... voids) {
-        MagiskManager mm = Global.MM();
+        MagiskManager mm = Data.MM();
         try {
             console.add("- Copying zip to temp directory");
 
@@ -94,8 +94,8 @@ public class FlashZip extends ParallelTask<Void, Void, Integer> {
                 console.add("! This zip is not a Magisk Module!");
                 break;
             case 1:
-                // Success
-                new LoadModules().exec();
+                // Reload modules
+                Utils.loadModules();
                 break;
         }
         activity.reboot.setVisibility(result > 0 ? View.VISIBLE : View.GONE);

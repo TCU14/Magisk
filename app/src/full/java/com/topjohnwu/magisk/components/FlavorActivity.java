@@ -1,5 +1,6 @@
 package com.topjohnwu.magisk.components;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
@@ -8,19 +9,30 @@ import android.support.annotation.StyleRes;
 import android.support.v7.app.AppCompatActivity;
 import android.view.WindowManager;
 
+import com.topjohnwu.magisk.Data;
 import com.topjohnwu.magisk.MagiskManager;
 import com.topjohnwu.magisk.R;
+import com.topjohnwu.magisk.utils.LocaleManager;
 import com.topjohnwu.magisk.utils.Topic;
 
-public abstract class FlavorActivity extends AppCompatActivity {
+public abstract class FlavorActivity extends AppCompatActivity implements Topic.AutoSubscriber {
 
     private ActivityResultListener activityResultListener;
+    static int[] EMPTY_INT_ARRAY = new int[0];
+    public MagiskManager mm;
 
-    public FlavorActivity() {
-        super();
-        Configuration configuration = new Configuration();
-        configuration.setLocale(MagiskManager.locale);
-        applyOverrideConfiguration(configuration);
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        Configuration config = base.getResources().getConfiguration();
+        config.setLocale(LocaleManager.locale);
+        applyOverrideConfiguration(config);
+        mm = Data.MM();
+    }
+
+    @Override
+    public int[] getSubscribedTopics() {
+        return EMPTY_INT_ARRAY;
     }
 
     @StyleRes
@@ -28,26 +40,18 @@ public abstract class FlavorActivity extends AppCompatActivity {
         return -1;
     }
 
-    public MagiskManager getMagiskManager() {
-        return (MagiskManager) super.getApplication();
-    }
-
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (this instanceof Topic.Subscriber) {
-            ((Topic.Subscriber) this).subscribeTopics();
-        }
-        if (getMagiskManager().isDarkTheme && getDarkTheme() != -1) {
+        Topic.subscribe(this);
+        if (Data.isDarkTheme && getDarkTheme() != -1) {
             setTheme(getDarkTheme());
         }
     }
 
     @Override
     protected void onDestroy() {
-        if (this instanceof Topic.Subscriber) {
-            ((Topic.Subscriber) this).unsubscribeTopics();
-        }
+        Topic.unsubscribe(this);
         super.onDestroy();
     }
 

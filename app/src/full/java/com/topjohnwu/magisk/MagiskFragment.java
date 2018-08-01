@@ -21,15 +21,14 @@ import android.widget.TextView;
 
 import com.topjohnwu.magisk.asyncs.CheckSafetyNet;
 import com.topjohnwu.magisk.asyncs.CheckUpdates;
-import com.topjohnwu.magisk.components.Activity;
+import com.topjohnwu.magisk.components.BaseActivity;
+import com.topjohnwu.magisk.components.BaseFragment;
 import com.topjohnwu.magisk.components.CustomAlertDialog;
 import com.topjohnwu.magisk.components.EnvFixDialog;
 import com.topjohnwu.magisk.components.ExpandableView;
-import com.topjohnwu.magisk.components.Fragment;
 import com.topjohnwu.magisk.components.MagiskInstallDialog;
 import com.topjohnwu.magisk.components.ManagerInstallDialog;
 import com.topjohnwu.magisk.components.UninstallDialog;
-import com.topjohnwu.magisk.utils.Const;
 import com.topjohnwu.magisk.utils.Download;
 import com.topjohnwu.magisk.utils.ISafetyNetHelper;
 import com.topjohnwu.magisk.utils.Topic;
@@ -42,12 +41,10 @@ import butterknife.ButterKnife;
 import butterknife.OnClick;
 import butterknife.Unbinder;
 
-public class MagiskFragment extends Fragment
-        implements Topic.Subscriber, SwipeRefreshLayout.OnRefreshListener, ExpandableView {
+public class MagiskFragment extends BaseFragment
+        implements SwipeRefreshLayout.OnRefreshListener, ExpandableView, Topic.Subscriber {
 
     private Container expandableContainer = new Container();
-
-    private MagiskManager mm;
     private Unbinder unbinder;
     private static boolean shownDialog = false;
 
@@ -119,13 +116,13 @@ public class MagiskFragment extends Fragment
         shownDialog = true;
 
         // Show Manager update first
-        if (Global.remoteManagerVersionCode > BuildConfig.VERSION_CODE) {
-            new ManagerInstallDialog((Activity) requireActivity()).show();
+        if (Data.remoteManagerVersionCode > BuildConfig.VERSION_CODE) {
+            new ManagerInstallDialog((BaseActivity) requireActivity()).show();
             return;
         }
 
         ((NotificationManager) mm.getSystemService(Context.NOTIFICATION_SERVICE)).cancelAll();
-        new MagiskInstallDialog((Activity) getActivity()).show();
+        new MagiskInstallDialog((BaseActivity) getActivity()).show();
     }
 
     @OnClick(R.id.uninstall_button)
@@ -141,15 +138,13 @@ public class MagiskFragment extends Fragment
         unbinder = ButterKnife.bind(this, v);
         requireActivity().setTitle(R.string.magisk);
 
-        mm = getApplication();
-
         expandableContainer.expandLayout = expandLayout;
         setupExpandable();
 
-        keepVerityChkbox.setChecked(Global.keepVerity);
-        keepVerityChkbox.setOnCheckedChangeListener((view, checked) -> Global.keepVerity = checked);
-        keepEncChkbox.setChecked(Global.keepEnc);
-        keepEncChkbox.setOnCheckedChangeListener((view, checked) -> Global.keepEnc = checked);
+        keepVerityChkbox.setChecked(Data.keepVerity);
+        keepVerityChkbox.setOnCheckedChangeListener((view, checked) -> Data.keepVerity = checked);
+        keepEncChkbox.setChecked(Data.keepEnc);
+        keepEncChkbox.setOnCheckedChangeListener((view, checked) -> Data.keepEnc = checked);
 
         mSwipeRefreshLayout.setOnRefreshListener(this);
         updateUI();
@@ -159,7 +154,7 @@ public class MagiskFragment extends Fragment
 
     @Override
     public void onRefresh() {
-        Global.loadMagiskInfo();
+        Data.loadMagiskInfo();
         updateUI();
 
         magiskUpdateText.setText(R.string.checking_for_updates);
@@ -168,34 +163,36 @@ public class MagiskFragment extends Fragment
 
         safetyNetStatusText.setText(R.string.safetyNet_check_text);
 
-        mm.safetyNetDone.reset();
-        mm.updateCheckDone.reset();
-        Global.remoteMagiskVersionString = null;
-        Global.remoteMagiskVersionCode = -1;
+        Topic.reset(getSubscribedTopics());
+        Data.remoteMagiskVersionString = null;
+        Data.remoteMagiskVersionCode = -1;
         collapse();
 
         shownDialog = false;
 
         // Trigger state check
         if (Download.checkNetworkStatus(mm)) {
-            new CheckUpdates().exec();
+            CheckUpdates.check();
         } else {
             mSwipeRefreshLayout.setRefreshing(false);
         }
     }
 
     @Override
-    public void onTopicPublished(Topic topic) {
-        if (topic == mm.updateCheckDone) {
-            updateCheckUI();
-        } else if (topic == mm.safetyNetDone) {
-            updateSafetyNetUI((int) topic.getResults()[0]);
-        }
+    public int[] getSubscribedTopics() {
+        return new int[] {Topic.SNET_CHECK_DONE, Topic.UPDATE_CHECK_DONE};
     }
 
     @Override
-    public Topic[] getSubscription() {
-        return new Topic[] { mm.updateCheckDone, mm.safetyNetDone };
+    public void onPublish(int topic, Object[] result) {
+        switch (topic) {
+            case Topic.SNET_CHECK_DONE:
+                updateSafetyNetUI((int) result[0]);
+                break;
+            case Topic.UPDATE_CHECK_DONE:
+                updateCheckUI();
+                break;
+        }
     }
 
     @Override
@@ -214,7 +211,7 @@ public class MagiskFragment extends Fragment
 
         boolean hasNetwork = Download.checkNetworkStatus(mm);
         boolean hasRoot = Shell.rootAccess();
-        boolean isUpToDate = Global.magiskVersionCode > Const.MAGISK_VER.UNIFIED;
+        boolean isUpToDate = Data.magiskVersionCode > Const.MAGISK_VER.UNIFIED;
 
         magiskUpdate.setVisibility(hasNetwork ? View.VISIBLE : View.GONE);
         safetyNetCard.setVisibility(hasNetwork ? View.VISIBLE : View.GONE);
@@ -223,14 +220,14 @@ public class MagiskFragment extends Fragment
 
         int image, color;
 
-        if (Global.magiskVersionCode < 0) {
+        if (Data.magiskVersionCode < 0) {
             color = colorBad;
             image = R.drawable.ic_cancel;
             magiskVersionText.setText(R.string.magisk_version_error);
         } else {
             color = colorOK;
             image = R.drawable.ic_check_circle;
-            magiskVersionText.setText(getString(R.string.current_magisk_title, "v" + Global.magiskVersionString));
+            magiskVersionText.setText(getString(R.string.current_magisk_title, "v" + Data.magiskVersionString));
         }
 
         magiskStatusIcon.setImageResource(image);
@@ -240,7 +237,7 @@ public class MagiskFragment extends Fragment
     private void updateCheckUI() {
         int image, color;
 
-        if (Global.remoteMagiskVersionCode < 0) {
+        if (Data.remoteMagiskVersionCode < 0) {
             color = colorNeutral;
             image = R.drawable.ic_help;
             magiskUpdateText.setText(R.string.invalid_update_channel);
@@ -248,11 +245,11 @@ public class MagiskFragment extends Fragment
         } else {
             color = colorOK;
             image = R.drawable.ic_check_circle;
-            magiskUpdateText.setText(getString(R.string.install_magisk_title, "v" + Global.remoteMagiskVersionString));
+            magiskUpdateText.setText(getString(R.string.install_magisk_title, "v" + Data.remoteMagiskVersionString));
             installButton.setVisibility(View.VISIBLE);
-            if (Global.remoteManagerVersionCode > BuildConfig.VERSION_CODE) {
+            if (Data.remoteManagerVersionCode > BuildConfig.VERSION_CODE) {
                 installText.setText(getString(R.string.update, getString(R.string.app_name)));
-            } else if (Global.magiskVersionCode > 0 && Global.remoteMagiskVersionCode > Global.magiskVersionCode) {
+            } else if (Data.magiskVersionCode > 0 && Data.remoteMagiskVersionCode > Data.magiskVersionCode) {
                 installText.setText(getString(R.string.update, getString(R.string.magisk)));
             } else {
                 installText.setText(R.string.install);
@@ -267,10 +264,10 @@ public class MagiskFragment extends Fragment
         mSwipeRefreshLayout.setRefreshing(false);
 
         if (!shownDialog) {
-            if (Global.remoteMagiskVersionCode > Global.magiskVersionCode
-                    || Global.remoteManagerVersionCode > BuildConfig.VERSION_CODE) {
+            if (Data.remoteMagiskVersionCode > Data.magiskVersionCode
+                    || Data.remoteManagerVersionCode > BuildConfig.VERSION_CODE) {
                 install();
-            } else if (Global.remoteMagiskVersionCode >= Const.MAGISK_VER.FIX_ENV &&
+            } else if (Data.remoteMagiskVersionCode >= Const.MAGISK_VER.FIX_ENV &&
                     !ShellUtils.fastCmdResult("env_check")) {
                 new EnvFixDialog(requireActivity()).show();
             }

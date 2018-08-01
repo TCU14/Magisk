@@ -10,7 +10,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import com.topjohnwu.magisk.adapters.PolicyAdapter;
-import com.topjohnwu.magisk.components.Fragment;
+import com.topjohnwu.magisk.components.BaseFragment;
 import com.topjohnwu.magisk.container.Policy;
 
 import java.util.List;
@@ -19,11 +19,10 @@ import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.Unbinder;
 
-public class SuperuserFragment extends Fragment {
+public class SuperuserFragment extends BaseFragment {
 
     private Unbinder unbinder;
     private PackageManager pm;
-    private MagiskManager mm;
     @BindView(R.id.recyclerView) RecyclerView recyclerView;
     @BindView(R.id.empty_rv) TextView emptyRv;
 
@@ -34,14 +33,13 @@ public class SuperuserFragment extends Fragment {
         unbinder = ButterKnife.bind(this, view);
 
         pm = getActivity().getPackageManager();
-        mm = getApplication();
         return view;
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        getActivity().setTitle(getString(R.string.superuser));
+        requireActivity().setTitle(getString(R.string.superuser));
     }
 
     @Override

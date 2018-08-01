@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.support.v7.app.AlertDialog;
 import android.webkit.WebView;
 
-import com.topjohnwu.magisk.Global;
+import com.topjohnwu.magisk.Data;
 import com.topjohnwu.magisk.MagiskManager;
 import com.topjohnwu.magisk.R;
 import com.topjohnwu.magisk.utils.WebService;
@@ -39,7 +39,7 @@ public class MarkDownWindow extends ParallelTask<Void, Void, String> {
 
     @Override
     protected String doInBackground(Void... voids) {
-        MagiskManager mm = Global.MM();
+        MagiskManager mm = Data.MM();
         String md;
         if (mUrl != null) {
             md = WebService.getString(mUrl);
@@ -55,9 +55,9 @@ public class MarkDownWindow extends ParallelTask<Void, Void, String> {
         }
         String css;
         try (
-            InputStream in = mm.getResources().openRawResource(
-                    mm.isDarkTheme ? R.raw.dark : R.raw.light);
-            ByteArrayOutputStream out = new ByteArrayOutputStream()
+                InputStream in = mm.getResources().openRawResource(
+                    Data.isDarkTheme ? R.raw.dark : R.raw.light);
+                ByteArrayOutputStream out = new ByteArrayOutputStream()
         ) {
             ShellUtils.pump(in, out);
             css = out.toString();

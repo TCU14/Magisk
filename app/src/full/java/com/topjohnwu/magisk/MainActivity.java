@@ -14,8 +14,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
-import com.topjohnwu.magisk.components.Activity;
-import com.topjohnwu.magisk.utils.Const;
+import com.topjohnwu.magisk.components.BaseActivity;
 import com.topjohnwu.magisk.utils.Download;
 import com.topjohnwu.magisk.utils.Topic;
 import com.topjohnwu.superuser.Shell;
@@ -23,7 +22,7 @@ import com.topjohnwu.superuser.Shell;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
-public class MainActivity extends Activity
+public class MainActivity extends BaseActivity
         implements NavigationView.OnNavigationItemSelectedListener, Topic.Subscriber {
 
     private final Handler mDrawerHandler = new Handler();
@@ -43,9 +42,6 @@ public class MainActivity extends Activity
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
-
-        MagiskManager mm = getMagiskManager();
-
         if (!mm.hasInit) {
             Intent intent = new Intent(this, SplashActivity.class);
             String section = getIntent().getStringExtra(Const.Key.OPEN_SECTION);
@@ -112,28 +108,27 @@ public class MainActivity extends Activity
     }
 
     @Override
-    public void onTopicPublished(Topic topic) {
-        recreate();
+    public int[] getSubscribedTopics() {
+        return new int[] {Topic.RELOAD_ACTIVITY};
     }
 
     @Override
-    public Topic[] getSubscription() {
-        return new Topic[] { getMagiskManager().reloadActivity };
+    public void onPublish(int topic, Object[] result) {
+        recreate();
     }
 
     public void checkHideSection() {
-        MagiskManager mm = getMagiskManager();
         Menu menu = navigationView.getMenu();
         menu.findItem(R.id.magiskhide).setVisible(
-                Shell.rootAccess() && Global.magiskVersionCode >= Const.MAGISK_VER.UNIFIED
+                Shell.rootAccess() && Data.magiskVersionCode >= Const.MAGISK_VER.UNIFIED
                         && mm.prefs.getBoolean(Const.Key.MAGISKHIDE, false));
         menu.findItem(R.id.modules).setVisible(!mm.prefs.getBoolean(Const.Key.COREONLY, false) &&
-                Shell.rootAccess() && Global.magiskVersionCode >= 0);
+                Shell.rootAccess() && Data.magiskVersionCode >= 0);
         menu.findItem(R.id.downloads).setVisible(!mm.prefs.getBoolean(Const.Key.COREONLY, false)
-                && Download.checkNetworkStatus(this) && Shell.rootAccess() && Global.magiskVersionCode >= 0);
+                && Download.checkNetworkStatus(this) && Shell.rootAccess() && Data.magiskVersionCode >= 0);
         menu.findItem(R.id.log).setVisible(Shell.rootAccess());
         menu.findItem(R.id.superuser).setVisible(Shell.rootAccess() &&
-                !(Const.USER_ID > 0 && mm.multiuserMode == Const.Value.MULTIUSER_MODE_OWNER_MANAGED));
+                !(Const.USER_ID > 0 && Data.multiuserMode == Const.Value.MULTIUSER_MODE_OWNER_MANAGED));
     }
 
     public void navigate(String item) {

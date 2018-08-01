@@ -5,11 +5,10 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
-import com.topjohnwu.magisk.Global;
+import com.topjohnwu.magisk.Const;
+import com.topjohnwu.magisk.Data;
 import com.topjohnwu.magisk.MagiskManager;
 import com.topjohnwu.magisk.container.Repo;
-import com.topjohnwu.magisk.utils.Const;
-import com.topjohnwu.magisk.utils.Utils;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -24,7 +23,7 @@ public class RepoDatabaseHelper extends SQLiteOpenHelper {
 
     public RepoDatabaseHelper(Context context) {
         super(context, "repo.db", null, DATABASE_VER);
-        mm = Utils.getMagiskManager(context);
+        mm = Data.MM();
         mDb = getWritableDatabase();
 
         // Remove outdated repos
@@ -101,7 +100,7 @@ public class RepoDatabaseHelper extends SQLiteOpenHelper {
 
     public Cursor getRepoCursor() {
         String orderBy = null;
-        switch (mm.repoOrder) {
+        switch (Data.repoOrder) {
             case Const.Value.ORDER_NAME:
                 orderBy = "name COLLATE NOCASE";
                 break;
@@ -109,7 +108,7 @@ public class RepoDatabaseHelper extends SQLiteOpenHelper {
                 orderBy = "last_update DESC";
         }
         return mDb.query(TABLE_NAME, null, "minMagisk<=? AND minMagisk>=?",
-                new String[] { String.valueOf(Global.magiskVersionCode), String.valueOf(Const.MIN_MODULE_VER()) },
+                new String[] { String.valueOf(Data.magiskVersionCode), String.valueOf(Const.MIN_MODULE_VER()) },
                 null, null, orderBy);
     }
 

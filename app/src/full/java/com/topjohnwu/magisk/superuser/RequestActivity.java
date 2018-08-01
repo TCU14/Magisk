@@ -19,14 +19,13 @@ import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import com.topjohnwu.magisk.MagiskManager;
+import com.topjohnwu.magisk.Const;
+import com.topjohnwu.magisk.Data;
 import com.topjohnwu.magisk.R;
 import com.topjohnwu.magisk.asyncs.ParallelTask;
-import com.topjohnwu.magisk.components.Activity;
+import com.topjohnwu.magisk.components.BaseActivity;
 import com.topjohnwu.magisk.container.Policy;
-import com.topjohnwu.magisk.utils.Const;
 import com.topjohnwu.magisk.utils.FingerprintHelper;
-import com.topjohnwu.magisk.utils.Utils;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -34,7 +33,7 @@ import java.io.IOException;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
-public class RequestActivity extends Activity {
+public class RequestActivity extends BaseActivity {
 
     @BindView(R.id.su_popup) LinearLayout suPopup;
     @BindView(R.id.timeout) Spinner timeout;
@@ -49,7 +48,6 @@ public class RequestActivity extends Activity {
     private String socketPath;
     private LocalSocket socket;
     private PackageManager pm;
-    private MagiskManager mm;
 
     private boolean hasTimeout;
     private Policy policy;
@@ -67,7 +65,6 @@ public class RequestActivity extends Activity {
         supportRequestWindowFeature(Window.FEATURE_NO_TITLE);
 
         pm = getPackageManager();
-        mm = Utils.getMagiskManager(this);
         mm.mDB.clearOutdated();
 
         Intent intent = getIntent();
@@ -102,7 +99,7 @@ public class RequestActivity extends Activity {
     }
 
     private void showRequest() {
-        switch (mm.suResponseType) {
+        switch (Data.suResponseType) {
             case Const.Value.SU_AUTO_DENY:
                 handleAction(Policy.DENY, 0);
                 return;
@@ -131,7 +128,7 @@ public class RequestActivity extends Activity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         timeout.setAdapter(adapter);
 
-        timer = new CountDownTimer(mm.suRequestTimeout * 1000, 1000) {
+        timer = new CountDownTimer(Data.suRequestTimeout * 1000, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
                 deny_btn.setText(getString(R.string.deny_with_str, "(" + millisUntilFinished / 1000 + ")"));
@@ -240,7 +237,7 @@ public class RequestActivity extends Activity {
 
     private class SocketManager extends ParallelTask<Void, Void, Boolean> {
 
-        SocketManager(Activity context) {
+        SocketManager(BaseActivity context) {
             super(context);
         }
 
