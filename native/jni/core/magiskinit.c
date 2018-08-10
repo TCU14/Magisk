@@ -36,16 +36,15 @@
 #include <sys/sendfile.h>
 #include <sys/sysmacros.h>
 
-#include <lzma.h>
+#include <xz.h>
 
-#include "binaries_xz.h"
-#include "binaries_arch_xz.h"
+#include "binaries.h"
+#include "binaries_arch.h"
 
 #include "magiskrc.h"
 #include "utils.h"
 #include "magiskpolicy.h"
 #include "daemon.h"
-#include "cpio.h"
 #include "magisk.h"
 
 #ifdef MAGISK_DEBUG
@@ -246,49 +245,53 @@ static int patch_sepolicy() {
 	return 0;
 }
 
-#define BUFSIZE (1 << 20)
-
-static int unxz(const void *buf, size_t size, int fd) {
-	lzma_stream strm = LZMA_STREAM_INIT;
-	if (lzma_auto_decoder(&strm, UINT64_MAX, 0) != LZMA_OK)
-		return 1;
-	lzma_ret ret;
-	void *out = malloc(BUFSIZE);
-	strm.next_in = buf;
-	strm.avail_in = size;
+static int unxz(int fd, const void *buf, size_t size) {
+	uint8_t out[8192];
+	xz_crc32_init();
+	struct xz_dec *dec = xz_dec_init(XZ_DYNALLOC, 1 << 26);
+	struct xz_buf b = {
+			.in = buf,
+			.in_pos = 0,
+			.in_size = size,
+			.out = out,
+			.out_pos = 0,
+			.out_size = sizeof(out)
+	};
+	enum xz_ret ret;
 	do {
-		strm.next_out = out;
-		strm.avail_out = BUFSIZE;
-		ret = lzma_code(&strm, LZMA_RUN);
-		xwrite(fd, out, BUFSIZE - strm.avail_out);
-	} while (strm.avail_out == 0 && ret == LZMA_OK);
-
-	free(out);
-	lzma_end(&strm);
-
-	if (ret != LZMA_OK && ret != LZMA_STREAM_END)
-		return 1;
+		ret = xz_dec_run(dec, &b);
+		if (ret != XZ_OK && ret != XZ_STREAM_END)
+			return 1;
+		write(fd, out, b.out_pos);
+		b.out_pos = 0;
+	} while (b.in_pos != size);
 	return 0;
 }
 
 static int dump_magisk(const char *path, mode_t mode) {
-	unlink(path);
 	int fd = creat(path, mode);
-	int ret = unxz(magisk_xz, sizeof(magisk_xz), fd);
+	if (fd < 0)
+		return 1;
+	if (unxz(fd, magisk_xz, sizeof(magisk_xz)))
+		return 1;
 	close(fd);
-	return ret;
+	return 0;
 }
 
 static int dump_manager(const char *path, mode_t mode) {
-	unlink(path);
 	int fd = creat(path, mode);
-	int ret = unxz(manager_xz, sizeof(manager_xz), fd);
+	if (fd < 0)
+		return 1;
+	if (unxz(fd, manager_xz, sizeof(manager_xz)))
+		return 1;
 	close(fd);
-	return ret;
+	return 0;
 }
 
 static int dump_magiskrc(const char *path, mode_t mode) {
 	int fd = creat(path, mode);
+	if (fd < 0)
+		return 1;
 	xwrite(fd, magiskrc, sizeof(magiskrc));
 	close(fd);
 	return 0;
@@ -365,23 +368,6 @@ int main(int argc, char *argv[]) {
 		// Clear rootfs
 		excl_list = (char *[]) { "overlay", ".backup", "proc", "sys", "init.bak", NULL };
 		frm_rf(root);
-	} else if (access("/ramdisk.cpio.xz", R_OK) == 0) {
-		// High compression mode
-		void *addr;
-		size_t size;
-		mmap_ro("/ramdisk.cpio.xz", &addr, &size);
-		int fd = creat("/ramdisk.cpio", 0);
-		unxz(addr, size, fd);
-		munmap(addr, size);
-		close(fd);
-		struct vector v;
-		vec_init(&v);
-		parse_cpio(&v, "/ramdisk.cpio");
-		excl_list = (char *[]) { "overlay", ".backup", "proc", "sys", "init.bak", NULL };
-		frm_rf(root);
-		chdir("/");
-		cpio_extract_all(&v);
-		cpio_vec_destroy(&v);
 	} else {
 		// Revert original init binary
 		link("/.backup/init", "/init");
