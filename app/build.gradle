@@ -22,7 +22,7 @@ android {
 
     productFlavors {
         full {
-            versionCode 2018081001
+            versionCode 134
             versionName "5.8.3"
             javaCompileOptions {
                 annotationProcessorOptions {
