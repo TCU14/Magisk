@@ -530,6 +530,7 @@ void startup() {
 		unblock_boot_process();
 	}
 
+#if 0
 	// Increment boot count
 	int boot_count = 0;
 	FILE *cf = fopen(BOOTCOUNT, "r");
@@ -543,6 +544,7 @@ void startup() {
 	cf = xfopen(BOOTCOUNT, "w");
 	fprintf(cf, "%d", boot_count);
 	fclose(cf);
+#endif
 
 	// No uninstaller or core-only mode
 	if (access(DISABLEFILE, F_OK) != 0) {
@@ -565,7 +567,7 @@ void startup() {
 	xmount(NULL, "/", NULL, MS_REMOUNT, NULL);
 
 	// Remove some traits of Magisk
-	unlink("/init.magisk.rc");
+	unlink(MAGISKRC);
 
 	// GSIs will have to override /sbin/adbd with /system/bin/adbd
 	if (access("/sbin/adbd", F_OK) == 0 && access("/system/bin/adbd", F_OK) == 0) {
