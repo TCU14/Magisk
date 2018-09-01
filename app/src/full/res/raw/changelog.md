@@ -1,9 +1,9 @@
-### 2018081001 v16.8-94dc6d4f
-- Fix XZ decompression in magiskinit
-- Improve build script
-- Split stub APK to new task
-- Compress binaries and use xz-embedded in magiskinit
-- Reorganize build script
-- Use xz-embedded for b64xz
-- Reorganize sources
-- Remove high compression mode
+### v5.9.0
+- No more on boot notifications
+- Support new mechanism for installing to inactive slot for OTAs on A/B devices
+- Fix restore Magisk Manager settings on Android P
+- Verify existing file checksums to prevent unnecessary re-downloads
+- Update SNET extension to use new Google API, fix "Invalid Response" errors
+- Move fingerprint settings to magisk database to prevent the settings to be easily removed
+- Fingerprint settings are now guarded with fingerprint authentications before it can get changed
+- Prevent any files to be downloaded to `/sdcard/MagiskManager`
