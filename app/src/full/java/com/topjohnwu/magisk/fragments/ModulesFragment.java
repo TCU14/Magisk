@@ -13,8 +13,8 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import com.topjohnwu.magisk.Const;
-import com.topjohnwu.magisk.FlashActivity;
 import com.topjohnwu.magisk.R;
+import com.topjohnwu.magisk.ViewBinder;
 import com.topjohnwu.magisk.adapters.ModulesAdapter;
 import com.topjohnwu.magisk.components.BaseFragment;
 import com.topjohnwu.magisk.container.Module;
@@ -30,18 +30,13 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnClick;
-import butterknife.Unbinder;
 
 public class ModulesFragment extends BaseFragment implements Topic.Subscriber {
 
-    private Unbinder unbinder;
-    @BindView(R.id.swipeRefreshLayout) SwipeRefreshLayout mSwipeRefreshLayout;
-    @BindView(R.id.recyclerView) RecyclerView recyclerView;
-    @BindView(R.id.empty_rv) TextView emptyRv;
-    @OnClick(R.id.fab)
+    public SwipeRefreshLayout mSwipeRefreshLayout;
+    public RecyclerView recyclerView;
+    public TextView emptyRv;
+
     public void selectFile() {
         runWithPermission(new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE }, () -> {
             Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
@@ -56,7 +51,7 @@ public class ModulesFragment extends BaseFragment implements Topic.Subscriber {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_modules, container, false);
-        unbinder = ButterKnife.bind(this, view);
+        ViewBinder.bind(this, view);
         setHasOptionsMenu(true);
 
         mSwipeRefreshLayout.setOnRefreshListener(() -> {
@@ -95,7 +90,7 @@ public class ModulesFragment extends BaseFragment implements Topic.Subscriber {
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == Const.ID.FETCH_ZIP && resultCode == Activity.RESULT_OK && data != null) {
             // Get the URI of the selected file
-            Intent intent = new Intent(getActivity(), FlashActivity.class);
+            Intent intent = new Intent(getActivity(), a.f.class);
             intent.setData(data.getData()).putExtra(Const.Key.FLASH_ACTION, Const.Value.FLASH_ZIP);
             startActivity(intent);
         }
@@ -104,7 +99,7 @@ public class ModulesFragment extends BaseFragment implements Topic.Subscriber {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        unbinder.unbind();
+        ViewBinder.unbind(this);
     }
 
     @Override
