@@ -10,7 +10,8 @@
 #MAGISK_VERSION_STUB
 
 # Detect whether in boot mode
-ps | grep zygote | grep -qv grep && BOOTMODE=true || BOOTMODE=false
+[ -z $BOOTMODE ] && BOOTMODE=false
+$BOOTMODE || ps | grep zygote | grep -qv grep && BOOTMODE=true
 $BOOTMODE || ps -A | grep zygote | grep -qv grep && BOOTMODE=true
 
 # Presets
@@ -19,7 +20,9 @@ $BOOTMODE || ps -A | grep zygote | grep -qv grep && BOOTMODE=true
 [ -z $IMG ] && IMG=$NVBASE/magisk.img
 [ -z $MOUNTPATH ] && MOUNTPATH=/sbin/.core/img
 
-BOOTSIGNER="/system/bin/dalvikvm -Xnodex2oat -Xnoimage-dex2oat -cp \$APK com.topjohnwu.magisk.utils.BootSigner"
+# Bootsigner related stuff
+BOOTSIGNERCLASS=a.a
+BOOTSIGNER="/system/bin/dalvikvm -Xnodex2oat -Xnoimage-dex2oat -cp \$APK \$BOOTSIGNERCLASS"
 BOOTSIGNED=false
 
 setup_flashable() {
