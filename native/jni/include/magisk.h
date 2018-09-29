@@ -6,7 +6,6 @@
 
 #include "logging.h"
 
-#define MAGISK_VER_STR  xstr(MAGISK_VERSION) ":MAGISK"
 #define MAIN_SOCKET  "d30138f2310a9fb9c54a3e0c21f58591"
 #define LOG_SOCKET   "5864cd77f2f8c59b3882e2d35dbf51e4"
 #define JAVA_PACKAGE_NAME "com.topjohnwu.magisk"
@@ -43,14 +42,13 @@
 
 extern char *argv0;     /* For changing process name */
 
-#define applet          ((char *[]) { "su", "resetprop", "magiskhide", "imgtool", NULL })
+#define applet_names    ((char *[]) { "magisk", "su", "resetprop", "magiskhide", "imgtool", NULL })
 #define init_applet     ((char *[]) { "magiskpolicy", "supolicy", NULL })
 
 extern int (*applet_main[]) (int, char *[]), (*init_applet_main[]) (int, char *[]);
 
-int create_links(const char *bin, const char *path);
-
 // Multi-call entrypoints
+int magisk_main(int argc, char *argv[]);
 int magiskhide_main(int argc, char *argv[]);
 int magiskpolicy_main(int argc, char *argv[]);
 int su_client_main(int argc, char *argv[]);

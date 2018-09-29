@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <fcntl.h>
+#include <string.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/mount.h>
@@ -15,6 +17,7 @@
 #include "magisk.h"
 #include "utils.h"
 #include "img.h"
+#include "flags.h"
 
 #define round_size(a) ((((a) / 32) + 2) * 32)
 #define SOURCE_TMP "/dev/.img_src"
@@ -97,6 +100,7 @@ static void usage() {
 }
 
 int imgtool_main(int argc, char *argv[]) {
+	cmdline_logging();
 	if (argc < 2)
 		usage();
 	if (strcmp(argv[1], "create") == 0) {

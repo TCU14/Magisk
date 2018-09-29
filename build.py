@@ -170,12 +170,12 @@ def build_binary(args):
 
 	header('* Building binaries: ' + ' '.join(args.target))
 
-	# Force update logging.h timestamp to trigger recompilation for the flags to make a difference
-	os.utime(os.path.join('native', 'jni', 'include', 'logging.h'))
+	os.utime(os.path.join('native', 'jni', 'include', 'flags.h'))
 
 	# Basic flags
-	base_flags = 'MAGISK_VERSION=\"{}\" MAGISK_VER_CODE={} MAGISK_DEBUG={}'.format(config['version'], config['versionCode'],
-		'' if args.release else '-DMAGISK_DEBUG')
+	base_flags = 'MAGISK_VERSION=\"{}\" MAGISK_VER_CODE={}'.format(config['version'], config['versionCode'])
+	if not args.release:
+		base_flags += ' MAGISK_DEBUG=1'
 
 	if 'magisk' in args.target:
 		# Magisk is special case as it is a dependency of magiskinit

@@ -8,12 +8,15 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 
 #include "magisk.h"
 #include "utils.h"
 #include "daemon.h"
+#include "flags.h"
 
 static int loggable = 0;
 static struct vector log_cmd, clear_cmd;

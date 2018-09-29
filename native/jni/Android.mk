@@ -10,14 +10,8 @@ LIBLZ4 := $(EXT_PATH)/lz4/lib
 LIBBZ2 := $(EXT_PATH)/bzip2
 LIBFDT := $(EXT_PATH)/dtc/libfdt
 LIBNANOPB := $(EXT_PATH)/nanopb
-LIBSYSTEMPROPERTIES := jni/resetprop/libsystemproperties/include
-COMMON_UTILS := \
-	utils/file.c \
-	utils/list.c \
-	utils/misc.c \
-	utils/vector.c \
-	utils/selinux.c \
-	utils/xwrap.c
+LIBSYSTEMPROPERTIES := jni/systemproperties/include
+LIBUTILS := jni/utils/include
 
 ########################
 # Binaries
@@ -29,21 +23,23 @@ ifdef B_MAGISK
 include $(CLEAR_VARS)
 LOCAL_MODULE := magisk
 LOCAL_SHARED_LIBRARIES := libsqlite
-LOCAL_STATIC_LIBRARIES := libnanopb libsystemproperties
+LOCAL_STATIC_LIBRARIES := libnanopb libsystemproperties libutils
 LOCAL_C_INCLUDES := \
 	jni/include \
-	jni/magiskpolicy \
 	$(EXT_PATH)/include \
 	$(LIBNANOPB) \
-	$(LIBSYSTEMPROPERTIES)
+	$(LIBSYSTEMPROPERTIES) \
+	$(LIBUTILS)
 
 LOCAL_SRC_FILES := \
-	core/magisk.c \
-	core/daemon.c \
-	core/log_daemon.c \
-	core/bootstages.c \
-	core/socket.c \
-	core/db.c \
+	main.c \
+	img.c \
+	daemon/magisk.c \
+	daemon/daemon.c \
+	daemon/log_daemon.c \
+	daemon/bootstages.c \
+	daemon/socket.c \
+	daemon/db.c \
 	magiskhide/magiskhide.c \
 	magiskhide/proc_monitor.c \
 	magiskhide/hide_utils.c \
@@ -54,11 +50,8 @@ LOCAL_SRC_FILES := \
 	su/su.c \
 	su/connect.c \
 	su/pts.c \
-	su/su_daemon.c \
-	utils/img.c \
-	$(COMMON_UTILS)
+	su/su_daemon.c
 
-LOCAL_CFLAGS := -DIS_DAEMON -DSELINUX
 LOCAL_LDLIBS := -llog
 include $(BUILD_EXECUTABLE)
 
@@ -69,22 +62,22 @@ ifdef B_INIT
 # magiskinit
 include $(CLEAR_VARS)
 LOCAL_MODULE := magiskinit
-LOCAL_STATIC_LIBRARIES := libsepol libxz
+LOCAL_STATIC_LIBRARIES := libsepol libxz libutils
 LOCAL_C_INCLUDES := \
 	jni/include \
 	jni/magiskpolicy \
 	$(EXT_PATH)/include \
 	out \
 	out/$(TARGET_ARCH_ABI) \
-	$(LIBSEPOL)
+	$(LIBSEPOL) \
+	$(LIBUTILS)
 
 LOCAL_SRC_FILES := \
-	core/magiskinit.c \
+	init.c \
 	magiskpolicy/api.c \
 	magiskpolicy/magiskpolicy.c \
 	magiskpolicy/rules.c \
-	magiskpolicy/sepolicy.c \
-	$(COMMON_UTILS)
+	magiskpolicy/sepolicy.c
 
 LOCAL_LDFLAGS := -static
 include $(BUILD_EXECUTABLE)
@@ -96,14 +89,15 @@ ifdef B_BOOT
 # magiskboot
 include $(CLEAR_VARS)
 LOCAL_MODULE := magiskboot
-LOCAL_STATIC_LIBRARIES := libmincrypt liblzma liblz4 libbz2 libfdt
+LOCAL_STATIC_LIBRARIES := libmincrypt liblzma liblz4 libbz2 libfdt libutils
 LOCAL_C_INCLUDES := \
 	jni/include \
 	$(EXT_PATH)/include \
 	$(LIBLZMA) \
 	$(LIBLZ4) \
 	$(LIBBZ2) \
-	$(LIBFDT)
+	$(LIBFDT) \
+	$(LIBUTILS)
 
 LOCAL_SRC_FILES := \
 	magiskboot/cpio.c \
@@ -114,10 +108,8 @@ LOCAL_SRC_FILES := \
 	magiskboot/format.c \
 	magiskboot/dtb.c \
 	magiskboot/ramdisk.c \
-	magiskboot/pattern.c \
-	$(COMMON_UTILS)
+	magiskboot/pattern.c
 
-LOCAL_CFLAGS := -DXWRAP_EXIT
 LOCAL_LDLIBS := -lz
 include $(BUILD_EXECUTABLE)
 
@@ -144,7 +136,8 @@ include jni/external/busybox/Android.mk
 endif
 
 ########################
-# Externals
+# Libraries
 ########################
+include jni/utils/Android.mk
+include jni/systemproperties/Android.mk
 include jni/external/Android.mk
-include jni/resetprop/libsystemproperties/Android.mk
