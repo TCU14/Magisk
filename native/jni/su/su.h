@@ -9,9 +9,13 @@
 #include <sys/stat.h>
 
 #include "db.h"
-#include "list.h"
 
 #define DEFAULT_SHELL "/system/bin/sh"
+
+// Constants for atty
+#define ATTY_IN     1
+#define ATTY_OUT    2
+#define ATTY_ERR    4
 
 struct su_info {
 	unsigned uid;          /* Unique key to find su_info */
@@ -22,43 +26,35 @@ struct su_info {
 	struct db_settings dbs;
 	struct db_strings str;
 	struct su_access access;
-	struct stat manager_stat;
+	struct stat mgr_st;
 
-	/* These should be guarded with global list lock */
-	struct list_head pos;
+	/* These should be guarded with global cache lock */
 	int ref;
-	int clock;
+	int life;
 };
+
+#define DB_SET(i, e) (i)->dbs.v[e]
+#define DB_STR(i, e) (i)->str.s[e]
 
 struct su_request {
 	unsigned uid;
-	int login;
-	int keepenv;
+	unsigned login;
+	unsigned keepenv;
+	unsigned mount_master;
 	char *shell;
 	char *command;
 };
 
 struct su_context {
 	struct su_info *info;
-	struct su_request to;
+	struct su_request req;
 	pid_t pid;
-	char cwd[PATH_MAX];
-	int pipefd[2];
 };
-
-extern struct su_context *su_ctx;
-
-// su.c
-
-int su_daemon_main(int argc, char **argv);
-__attribute__ ((noreturn)) void exit2(int status);
-void set_identity(unsigned uid);
 
 // connect.c
 
-void app_log();
-
-void app_connect(const char *socket);
-void socket_send_request(int fd);
+void app_log(struct su_context *ctx);
+void app_connect(const char *socket, struct su_info *info);
+void socket_send_request(int fd, struct su_info *info);
 
 #endif
