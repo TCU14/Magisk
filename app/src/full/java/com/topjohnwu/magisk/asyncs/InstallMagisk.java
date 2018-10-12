@@ -135,7 +135,7 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
         BufferedInputStream buf;
 
         if (!ShellUtils.checkSum("MD5", zip, Data.magiskMD5)) {
-            console.add("- Downloading zip");
+            console.add("- Downloading zip from " + Data.magiskLink);
             HttpURLConnection conn = WebService.mustRequest(Data.magiskLink, null);
             buf = new BufferedInputStream(new ProgressStream(conn), conn.getContentLength());
             buf.mark(conn.getContentLength() + 1);
@@ -145,7 +145,7 @@ public class InstallMagisk extends ParallelTask<Void, Void, Boolean> {
             buf.reset();
             conn.disconnect();
         } else {
-            console.add("- Existing zip found");
+            console.add("- Existing zip found in " + mm.getFilesDir());
             buf = new BufferedInputStream(new FileInputStream(zip), (int) zip.length());
             buf.mark((int) zip.length() + 1);
         }
