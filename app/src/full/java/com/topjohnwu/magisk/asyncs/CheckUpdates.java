@@ -51,6 +51,9 @@ public class CheckUpdates {
             case Const.Value.BETA_CHANNEL:
                 jsonStr = WebService.getString(Const.Url.BETA_URL);
                 break;
+            case Const.Value.IANMACD_CHANNEL:
+                jsonStr = WebService.getString(Const.Url.IANMACD_URL);
+                break;
             case Const.Value.CUSTOM_CHANNEL:
                 jsonStr = WebService.getString(Data.MM().prefs.getString(Const.Key.CUSTOM_CHANNEL, ""));
                 break;

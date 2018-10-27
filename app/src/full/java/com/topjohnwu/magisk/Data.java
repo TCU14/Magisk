@@ -192,7 +192,7 @@ public class Data {
 
         // config
         isDarkTheme = mm.prefs.getBoolean(Const.Key.DARK_THEME, false);
-        updateChannel = Utils.getPrefsInt(mm.prefs, Const.Key.UPDATE_CHANNEL, Const.Value.STABLE_CHANNEL);
+        updateChannel = Utils.getPrefsInt(mm.prefs, Const.Key.UPDATE_CHANNEL, Const.Value.IANMACD_CHANNEL);
         repoOrder = mm.prefs.getInt(Const.Key.REPO_ORDER, Const.Value.ORDER_DATE);
     }
 

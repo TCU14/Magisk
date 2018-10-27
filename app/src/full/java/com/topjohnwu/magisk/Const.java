@@ -70,6 +70,7 @@ public class Const {
     public static class Url {
         public static final String STABLE_URL = "https://raw.githubusercontent.com/topjohnwu/magisk_files/master/stable.json";
         public static final String BETA_URL = "https://raw.githubusercontent.com/topjohnwu/magisk_files/master/beta.json";
+        public static final String IANMACD_URL = "https://raw.githubusercontent.com/ianmacd/MagiskBuilds/master/updates/ianmacd.json";
         public static final String REPO_URL = "https://api.github.com/users/Magisk-Modules-Repo/repos?per_page=100&sort=pushed&page=%d";
         public static final String FILE_URL = "https://raw.githubusercontent.com/Magisk-Modules-Repo/%s/master/%s";
         public static final String ZIP_URL = "https://github.com/Magisk-Modules-Repo/%s/archive/master.zip";
@@ -123,6 +124,7 @@ public class Const {
         public static final int STABLE_CHANNEL = 0;
         public static final int BETA_CHANNEL = 1;
         public static final int CUSTOM_CHANNEL = 2;
+        public static final int IANMACD_CHANNEL = 3;
         public static final int ROOT_ACCESS_DISABLED = 0;
         public static final int ROOT_ACCESS_APPS_ONLY = 1;
         public static final int ROOT_ACCESS_ADB_ONLY = 2;
