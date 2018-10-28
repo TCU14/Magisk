@@ -15,6 +15,7 @@
 #include "magiskhide.h"
 #include "daemon.h"
 #include "resetprop.h"
+#include "flags.h"
 
 struct vector *hide_list = NULL;
 
@@ -114,7 +115,6 @@ void stop_magiskhide(int client) {
 }
 
 int magiskhide_main(int argc, char *argv[]) {
-	cmdline_logging();
 	if (argc < 2) {
 		usage(argv[0]);
 	}

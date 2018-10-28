@@ -34,10 +34,7 @@ public class Const {
 
     // Versions
     public static final int UPDATE_SERVICE_VER = 1;
-
-    public static int MIN_MODULE_VER() {
-        return Data.magiskVersionCode >= MAGISK_VER.REMOVE_LEGACY_LINK ? 1500 : 1400;
-    }
+    public static final int MIN_MODULE_VER = 1500;
 
     /* A list of apps that should not be shown as hide-able */
     public static final List<String> HIDE_BLACKLIST =  Arrays.asList(
@@ -52,6 +49,7 @@ public class Const {
         public static final int SEPOL_REFACTOR = 1640;
         public static final int FIX_ENV = 1650;
         public static final int DBVER_SIX = 17000;
+        public static final int CMDLINE_DB = 17305;
     }
 
     public static class ID {
@@ -74,7 +72,7 @@ public class Const {
         public static final String REPO_URL = "https://api.github.com/users/Magisk-Modules-Repo/repos?per_page=100&sort=pushed&page=%d";
         public static final String FILE_URL = "https://raw.githubusercontent.com/Magisk-Modules-Repo/%s/master/%s";
         public static final String ZIP_URL = "https://github.com/Magisk-Modules-Repo/%s/archive/master.zip";
-        public static final String PAYPAL_URL = "https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=CC7FZ7526MNGG";
+        public static final String PAYPAL_URL = "https://www.paypal.me/topjohnwu";
         public static final String PATREON_URL = "https://www.patreon.com/topjohnwu";
         public static final String TWITTER_URL = "https://twitter.com/topjohnwu";
         public static final String XDA_THREAD = "http://forum.xda-developers.com/showthread.php?t=3432382";

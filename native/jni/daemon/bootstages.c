@@ -587,6 +587,7 @@ static const char wrapper[] =
 "exec /sbin/magisk.bin \"${0##*/}\" \"$@\"\n";
 
 void startup() {
+	android_logging();
 	if (!check_data())
 		unblock_boot_process();
 
@@ -782,9 +783,6 @@ void startup() {
 		xsymlink(MIRRDIR "/bin/busybox", BBPATH "/busybox");
 	}
 
-	// Preserve a copy of logcat
-	cp_afc("/system/bin/logcat", MIRRDIR "/bin/logcat");
-
 	// Start post-fs-data mode
 	execl("/sbin/magisk.bin", "magisk", "--post-fs-data", NULL);
 }
@@ -942,13 +940,16 @@ core_only:
 	} else {
 		// Check whether we have a valid manager installed
 		sqlite3 *db = get_magiskdb();
-		struct db_strings str;
-		memset(&str, 0, sizeof(str));
-		get_db_strings(db, SU_MANAGER, &str);
-		if (validate_manager(str.s[SU_MANAGER], 0, NULL)) {
-			// There is no manager installed, install the stub
-			exec_command_sync("/sbin/magiskinit", "-x", "manager", "/data/magisk.apk", NULL);
-			install_apk("/data/magisk.apk");
+		if (db) {
+			struct db_strings str;
+			memset(&str, 0, sizeof(str));
+			get_db_strings(db, SU_MANAGER, &str);
+			if (validate_manager(str.s[SU_MANAGER], 0, NULL)) {
+				// There is no manager installed, install the stub
+				exec_command_sync("/sbin/magiskinit", "-x", "manager", "/data/magisk.apk", NULL);
+				install_apk("/data/magisk.apk");
+			}
+			sqlite3_close_v2(db);
 		}
 	}
 

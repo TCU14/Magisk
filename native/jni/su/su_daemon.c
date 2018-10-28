@@ -75,7 +75,7 @@ static void database_check(struct su_info *info) {
 
 		if (uid > 0)
 			get_uid_policy(db, uid, &info->access);
-		sqlite3_close(db);
+		sqlite3_close_v2(db);
 	}
 
 	// We need to check our manager
@@ -361,8 +361,10 @@ void su_daemon_handler(int client, struct ucred *credential) {
 			break;
 	}
 
-	if (info->access.notify || info->access.log)
+	if (info->access.log)
 		app_log(&ctx);
+	else if (info->access.notify)
+		app_notify(&ctx);
 
 	if (info->access.policy == ALLOW) {
 		char* argv[] = { NULL, NULL, NULL, NULL };

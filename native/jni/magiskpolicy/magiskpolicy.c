@@ -10,6 +10,7 @@
 #include "vector.h"
 #include "magiskpolicy.h"
 #include "magisk.h"
+#include "flags.h"
 
 static int syntax_err = 0;
 static char err_msg[ARG_MAX];
@@ -391,7 +392,6 @@ static void syntax_error_msg() {
 }
 
 int magiskpolicy_main(int argc, char *argv[]) {
-	cmdline_logging();
 	char *outfile = NULL, *tok, *saveptr;
 	int magisk = 0;
 	struct vector rules;

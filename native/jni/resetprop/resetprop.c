@@ -22,6 +22,7 @@
 #include "_resetprop.h"
 #include "vector.h"
 #include "utils.h"
+#include "flags.h"
 
 int prop_verbose = 0;
 
@@ -297,7 +298,6 @@ static int verbose_logging(const char *fmt, va_list ap) {
 }
 
 int resetprop_main(int argc, char *argv[]) {
-	cmdline_logging();
 	log_cb.d = verbose_logging;
 	
 	int trigger = 1, persist = 0;
