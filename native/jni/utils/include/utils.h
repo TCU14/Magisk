@@ -12,6 +12,9 @@
 #include <sys/stat.h>
 
 #ifdef __cplusplus
+// C++ only
+#include "array.h"
+int file_to_array(const char* filename, Array<char *> &arr);
 extern "C" {
 #endif
 
@@ -87,12 +90,11 @@ int file_to_vector(const char* filename, struct vector *v);
 int vector_to_file(const char* filename, struct vector *v);
 ssize_t fdgets(char *buf, size_t size, int fd);
 int is_num(const char *s);
-int exec_array(int err, int *fd, void (*setenv)(struct vector *), char *const *argv);
-int exec_command(int err, int *fd, void (*setenv)(struct vector*), const char *argv0, ...);
-int exec_command_sync(char *const argv0, ...);
+int exec_array(int err, int *fd, void (*cb)(void), const char *argv[]);
+int exec_command(int err, int *fd, void (*cb)(void), const char *argv0, ...);
+int exec_command_sync(const char *argv0, ...);
 int switch_mnt_ns(int pid);
 int fork_dont_care();
-void wait_till_exists(const char *target);
 void gen_rand_str(char *buf, int len);
 int strend(const char *s1, const char *s2);
 
