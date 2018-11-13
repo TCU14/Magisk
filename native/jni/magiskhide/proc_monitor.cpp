@@ -23,6 +23,7 @@
 #include "flags.h"
 
 static int sockfd = -1;
+extern char *system_block, *vendor_block, *magiskloop;
 
 // Workaround for the lack of pthread_cancel
 static void term_thread(int) {
@@ -52,6 +53,8 @@ static int parse_ppid(int pid) {
 	int fd, ppid;
 	sprintf(path, "/proc/%d/stat", pid);
 	fd = xopen(path, O_RDONLY);
+	if (fd < 0)
+		return -1;
 	xread(fd, stat, sizeof(stat));
 	close(fd);
 	/* PID COMM STATE PPID ..... */
@@ -71,9 +74,10 @@ static void hide_daemon(int pid) {
 	if (switch_mnt_ns(pid))
 		goto exit;
 
-	snprintf(buffer, sizeof(buffer), "/proc/%d/mounts", pid);
-	file_to_vector(buffer, mounts);
+	snprintf(buffer, sizeof(buffer), "/proc/%d", pid);
+	chdir(buffer);
 
+	file_to_vector("mounts", mounts);
 	// Unmount dummy skeletons and /sbin links
 	for (auto &s : mounts) {
 		if (s.contains("tmpfs /system/") || s.contains("tmpfs /vendor/") || s.contains("tmpfs /sbin")) {
@@ -84,12 +88,12 @@ static void hide_daemon(int pid) {
 	mounts.clear();
 
 	// Re-read mount infos
-	snprintf(buffer, sizeof(buffer), "/proc/%d/mounts", pid);
-	file_to_vector(buffer, mounts);
+	file_to_vector("mounts", mounts);
 
 	// Unmount everything under /system, /vendor, and loop mounts
 	for (auto &s : mounts) {
-		if (s.contains("/dev/block/loop") || s.contains(" /system/") || s.contains(" /vendor/")) {
+		if ((s.contains(" /system/") || s.contains(" /vendor/")) &&
+			(s.contains(system_block) || s.contains(vendor_block) || s.contains(magiskloop))) {
 			sscanf(s, "%*s %4096s", buffer);
 			lazy_unmount(buffer);
 		}
@@ -162,13 +166,13 @@ void proc_monitor() {
 			}
 		}
 		pthread_mutex_unlock(&list_lock);
-		if (!hide)
+
+		if (!hide || (ppid = parse_ppid(pid)) < 0 || read_ns(ppid, &pns) == -1)
 			continue;
 
-		ppid = parse_ppid(pid);
-		read_ns(ppid, &pns);
 		do {
-			read_ns(pid, &ns);
+			if (read_ns(pid, &ns) == -1)
+				break;
 			if (ns.st_dev == pns.st_dev && ns.st_ino == pns.st_ino)
 				usleep(50);
 			else
@@ -196,4 +200,5 @@ void proc_monitor() {
 		if (fork_dont_care() == 0)
 			hide_daemon(pid);
 	}
+	pthread_exit(nullptr);
 }
