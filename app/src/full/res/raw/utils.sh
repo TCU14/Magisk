@@ -6,7 +6,7 @@ db_sepatch() {
 
 db_clean() {
   local USERID=$1
-  local DIR="/sbin/.core/db-${USERID}"
+  local DIR="/sbin/.magisk/db-${USERID}"
   umount -l /data/user*/*/*/databases/su.db $DIR $DIR/*
   rm -rf $DIR
   [ "$USERID" = "*" ] && rm -fv /data/adb/magisk.db*
@@ -26,7 +26,7 @@ db_restore() {
 db_setup() {
   local USER=$1
   local USERID=$(($USER / 100000))
-  local DIR=/sbin/.core/db-${USERID}
+  local DIR=/sbin/.magisk/db-${USERID}
   mkdir -p $DIR
   touch $DIR/magisk.db
   mount -o bind /data/adb/magisk.db $DIR/magisk.db
@@ -49,8 +49,8 @@ fix_env() {
   sh update-binary extract
   rm -f update-binary magisk.apk
   cd /
-  rm -rf /sbin/.core/busybox/*
-  /sbin/.core/mirror/bin/busybox --install -s /sbin/.core/busybox
+  rm -rf /sbin/.magisk/busybox/*
+  /sbin/.magisk/mirror/bin/busybox --install -s /sbin/.magisk/busybox
 }
 
 direct_install() {
@@ -79,8 +79,9 @@ mm_patch_dtbo() {
 }
 
 restore_imgs() {
-  local SHA1=`cat /.backup/.sha1`
-  [ -z $SHA1 ] && local SHA1=`grep_prop #STOCKSHA1`
+  local SHA1=`grep_prop SHA1 /.backup/.magisk`
+  [ -z $SHA1 ] && local SHA1=`cat /.backup/.sha1`
+  [ -z $SHA1 ] && local SHA1=`grep_prop #STOCKSHA1 /.backup/.magisk`
   [ -z $SHA1 ] && return 1
   local STOCKBOOT=/data/stock_boot_${SHA1}.img.gz
   local STOCKDTBO=/data/stock_dtbo.img.gz
