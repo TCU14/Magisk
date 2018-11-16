@@ -18,13 +18,12 @@ public class Const {
     public static final String SU_KEYSTORE_KEY = "su_key";
 
     // Paths
-    public static File MAGISK_PATH;
+    public static final String MAGISK_PATH = "/sbin/.magisk/img";
     public static File MAGISK_DISABLE_FILE;
-    public static File MAGISK_HOST_FILE;
 
     static {
         /* Prevent crashing on unrooted devices */
-        MAGISK_PATH = MAGISK_DISABLE_FILE = MAGISK_HOST_FILE = new File("xxx");
+        MAGISK_DISABLE_FILE = new File("xxx");
     }
 
     public static final String BUSYBOX_PATH = "/sbin/.magisk/busybox";
@@ -45,11 +44,11 @@ public class Const {
     public static final int USER_ID = Process.myUid() / 100000;
 
     public static final class MAGISK_VER {
-        public static final int REMOVE_LEGACY_LINK = 1630;
         public static final int SEPOL_REFACTOR = 1640;
         public static final int FIX_ENV = 1650;
         public static final int DBVER_SIX = 17000;
         public static final int CMDLINE_DB = 17305;
+        public static final int HIDE_STATUS = 17315;
     }
 
     public static class ID {

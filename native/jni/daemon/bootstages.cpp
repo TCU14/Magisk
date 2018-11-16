@@ -25,10 +25,12 @@
 
 static char buf[PATH_MAX], buf2[PATH_MAX];
 static Vector<CharArray> module_list;
+static bool seperate_vendor;
 
 char *system_block, *vendor_block, *magiskloop;
 
 static int bind_mount(const char *from, const char *to);
+extern void auto_start_magiskhide();
 
 /***************
  * Magic Mount *
@@ -304,27 +306,27 @@ static void set_mirror_path() {
 static void exec_common_script(const char* stage) {
 	DIR *dir;
 	struct dirent *entry;
-	snprintf(buf2, PATH_MAX, "%s/%s.d", COREDIR, stage);
+	snprintf(buf2, PATH_MAX, "%s/%s.d", SECURE_DIR, stage);
 
 	if (!(dir = xopendir(buf2)))
 		return;
+	chdir(buf2);
 
 	while ((entry = xreaddir(dir))) {
 		if (entry->d_type == DT_REG) {
-			snprintf(buf2, PATH_MAX, "%s/%s.d/%s", COREDIR, stage, entry->d_name);
-			if (access(buf2, X_OK) == -1)
+			if (access(entry->d_name, X_OK) == -1)
 				continue;
 			LOGI("%s.d: exec [%s]\n", stage, entry->d_name);
-			int pid = exec_command(
-					0, nullptr,
+			int pid = exec_command(0, nullptr,
 					strcmp(stage, "post-fs-data") ? set_path : set_mirror_path,
-					"sh", buf2, nullptr);
+					"sh", entry->d_name, nullptr);
 			if (pid != -1)
 				waitpid(pid, nullptr, 0);
 		}
 	}
 
 	closedir(dir);
+	chdir("/");
 }
 
 static void exec_module_script(const char* stage) {
@@ -427,6 +429,10 @@ static bool magisk_env() {
 	xmkdir(MOUNTPOINT, 0755);
 	xmkdir(BLOCKDIR, 0755);
 
+	// Boot script directories
+	xmkdir(SECURE_DIR "/post-fs-data.d", 0755);
+	xmkdir(SECURE_DIR "/service.d", 0755);
+
 	LOGI("* Mounting mirrors");
 	Vector<CharArray> mounts;
 	file_to_vector("/proc/mounts", mounts);
@@ -447,7 +453,7 @@ static bool magisk_env() {
 			LOGI("mount: %s\n", MIRRDIR "/system");
 #endif
 		} else if (line.contains(" /vendor ")) {
-			seperate_vendor = 1;
+			seperate_vendor = true;
 			sscanf(line, "%s %*s %s", buf, buf2);
 			vendor_block = strdup2(buf);
 			xmkdir(MIRRDIR "/vendor", 0755);
@@ -475,7 +481,10 @@ static bool magisk_env() {
 	LOGI("* Setting up internal busybox");
 	exec_command_sync(MIRRDIR "/bin/busybox", "--install", "-s", BBPATH, nullptr);
 	xsymlink(MIRRDIR "/bin/busybox", BBPATH "/busybox");
+	return true;
+}
 
+static bool prepare_img() {
 	const char *alt_img[] =
 			{ "/cache/magisk.img", "/data/magisk_merge.img", "/data/adb/magisk_merge.img" };
 
@@ -496,9 +505,21 @@ static bool magisk_env() {
 	if (magiskloop == nullptr)
 		return false;
 
-	xmkdir(COREDIR, 0755);
-	xmkdir(COREDIR "/post-fs-data.d", 0755);
-	xmkdir(COREDIR "/service.d", 0755);
+	// Migrate legacy boot scripts
+	struct stat st;
+	if (lstat(LEGACY_CORE "/post-fs-data.d", &st) == 0 && S_ISDIR(st.st_mode)) {
+		cp_afc(LEGACY_CORE "/post-fs-data.d", SECURE_DIR "/post-fs-data.d");
+		rm_rf(LEGACY_CORE "/post-fs-data.d");
+	}
+	if (lstat(LEGACY_CORE "/service.d", &st) == 0 && S_ISDIR(st.st_mode)) {
+		cp_afc(LEGACY_CORE "/service.d", SECURE_DIR "/service.d");
+		rm_rf(LEGACY_CORE "/service.d");
+	}
+
+	// Links for legacy paths
+	xmkdir(LEGACY_CORE, 0755);
+	symlink(SECURE_DIR "/post-fs-data.d", LEGACY_CORE "/post-fs-data.d");
+	symlink(SECURE_DIR "/service.d", LEGACY_CORE "/service.d");
 
 	DIR *dir = xopendir(MOUNTPOINT);
 	struct dirent *entry;
@@ -579,24 +600,6 @@ static bool check_data() {
 	return data;
 }
 
-extern int launch_magiskhide(int client = -1);
-
-static void *start_magisk_hide(void *) {
-	launch_magiskhide();
-	return nullptr;
-}
-
-static void auto_start_magiskhide() {
-	if (!start_log_daemon())
-		return;
-	CharArray hide_prop = getprop(MAGISKHIDE_PROP, true);
-	if (hide_prop != "0") {
-		pthread_t thread;
-		xpthread_create(&thread, nullptr, start_magisk_hide, nullptr);
-		pthread_detach(thread);
-	}
-}
-
 void unlock_blocks() {
 	DIR *dir;
 	struct dirent *entry;
@@ -622,7 +625,7 @@ void unlock_blocks() {
  * Entry points *
  ****************/
 
-static void unblock_boot_process() {
+[[noreturn]] static void unblock_boot_process() {
 	close(xopen(UNBLOCKFILE, O_RDONLY | O_CREAT, 0));
 	pthread_exit(nullptr);
 }
@@ -642,7 +645,7 @@ void startup() {
 		/* If the folder is not automatically created by the system,
 		 * do NOT proceed further. Manual creation of the folder
 		 * will cause bootloops on FBE devices. */
-		LOGE(SECURE_DIR" is not present, abort...");
+		LOGE(SECURE_DIR " is not present, abort...");
 		unblock_boot_process();
 	}
 
@@ -751,13 +754,7 @@ void startup() {
 	execl("/sbin/magisk.bin", "magisk", "--post-fs-data", nullptr);
 }
 
-static void core_only() {
-	// Systemless hosts
-	if (access(HOSTSFILE, F_OK) == 0) {
-		LOGI("* Enabling systemless hosts file support");
-		bind_mount(HOSTSFILE, "/system/etc/hosts");
-	}
-
+[[noreturn]] static void core_only() {
 	auto_start_magiskhide();
 	unblock_boot_process();
 }
@@ -767,22 +764,23 @@ void post_fs_data(int client) {
 	write_int(client, 0);
 	close(client);
 
-	// If post-fs-data mode is started, it means startup succeeded
-	setup_done = 1;
-
 	xmount(nullptr, "/", nullptr, MS_REMOUNT | MS_RDONLY, nullptr);
 
 	LOGI("** post-fs-data mode running\n");
 
-	// If magisk environment setup failed, only run core only operations
 	if (!magisk_env()) {
-		free(magiskloop);
-		magiskloop = nullptr;
-		core_only();
-		return;
+		LOGE("* Magisk environment setup incomplete, abort\n");
+		unblock_boot_process();
 	}
 
 	start_log_daemon();
+
+	if (!prepare_img()) {
+		LOGE("* Magisk image mount failed, switch to core-only mode\n");
+		free(magiskloop);
+		magiskloop = nullptr;
+		creat(DISABLEFILE, 0644);
+	}
 
 	restorecon();
 	chmod(SECURE_DIR, 0700);
@@ -792,10 +790,8 @@ void post_fs_data(int client) {
 	exec_common_script("post-fs-data");
 
 	// Core only mode
-	if (access(DISABLEFILE, F_OK) == 0) {
+	if (access(DISABLEFILE, F_OK) == 0)
 		core_only();
-		return;
-	}
 
 	// Execute module scripts
 	LOGI("* Running module post-fs-data scripts\n");
@@ -864,12 +860,8 @@ void late_start(int client) {
 	if (access(SECURE_DIR, F_OK) != 0) {
 		// It's safe to create the folder at this point if the system didn't create it
 		xmkdir(SECURE_DIR, 0700);
-	}
-
-	if (!setup_done) {
-		// The setup failed for some reason, reboot and try again
+		// And reboot to make proper setup possible
 		exec_command_sync("/system/bin/reboot", nullptr);
-		return;
 	}
 
 	auto_start_magiskhide();
@@ -892,16 +884,12 @@ core_only:
 		install_apk("/data/magisk.apk");
 	} else {
 		// Check whether we have a valid manager installed
-		sqlite3 *db = get_magiskdb();
-		if (db) {
-			db_strings str;
-			get_db_strings(db, &str, SU_MANAGER);
-			if (validate_manager(str[SU_MANAGER], 0, nullptr)) {
-				// There is no manager installed, install the stub
-				exec_command_sync("/sbin/magiskinit", "-x", "manager", "/data/magisk.apk", nullptr);
-				install_apk("/data/magisk.apk");
-			}
-			sqlite3_close_v2(db);
+		db_strings str;
+		get_db_strings(&str, SU_MANAGER);
+		if (validate_manager(str[SU_MANAGER], 0, nullptr)) {
+			// There is no manager installed, install the stub
+			exec_command_sync("/sbin/magiskinit", "-x", "manager", "/data/magisk.apk", nullptr);
+			install_apk("/data/magisk.apk");
 		}
 	}
 

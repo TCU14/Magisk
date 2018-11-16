@@ -18,10 +18,8 @@
 #include "utils.h"
 #include "daemon.h"
 #include "selinux.h"
+#include "db.h"
 #include "flags.h"
-
-int setup_done = 0;
-int seperate_vendor = 0;
 
 static void get_client_cred(int fd, struct ucred *cred) {
 	socklen_t ucred_length = sizeof(*cred);
@@ -42,6 +40,7 @@ static void *request_handler(void *args) {
 	case POST_FS_DATA:
 	case LATE_START:
 	case BOOT_COMPLETE:
+	case SQLITE_CMD:
 		if (credential.uid != 0) {
 			write_int(client, ROOT_REQUIRED);
 			close(client);
@@ -77,6 +76,10 @@ static void *request_handler(void *args) {
 		break;
 	case HANDSHAKE:
 		/* Do NOT close the client, make it hold */
+		break;
+	case SQLITE_CMD:
+		exec_sql(client);
+		close(client);
 		break;
 	default:
 		close(client);

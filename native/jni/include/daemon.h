@@ -9,9 +9,6 @@
 #include <sys/un.h>
 #include <sys/socket.h>
 
-extern int setup_done;
-extern int seperate_vendor;
-
 // Commands require connecting to daemon
 enum {
 	DO_NOTHING = 0,
@@ -23,7 +20,8 @@ enum {
 	BOOT_COMPLETE,
 	MAGISKHIDE,
 	HIDE_CONNECT,
-	HANDSHAKE
+	HANDSHAKE,
+	SQLITE_CMD,
 };
 
 // Return codes for daemon

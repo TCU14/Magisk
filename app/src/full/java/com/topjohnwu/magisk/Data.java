@@ -91,8 +91,12 @@ public class Data {
         try {
             magiskVersionString = ShellUtils.fastCmd("magisk -v").split(":")[0];
             magiskVersionCode = Integer.parseInt(ShellUtils.fastCmd("magisk -V"));
-            String s = ShellUtils.fastCmd(("resetprop -p ") + Const.MAGISKHIDE_PROP);
-            magiskHide = s.isEmpty() || Integer.parseInt(s) != 0;
+            if (magiskVersionCode >= Const.MAGISK_VER.HIDE_STATUS) {
+                magiskHide = Shell.su("magiskhide --status").exec().isSuccess();
+            } else {
+                String s = ShellUtils.fastCmd(("resetprop -p ") + Const.MAGISKHIDE_PROP);
+                magiskHide = s.isEmpty() || Integer.parseInt(s) != 0;
+            }
         } catch (NumberFormatException ignored) {}
     }
 
@@ -187,7 +191,6 @@ public class Data {
         MM().prefs.edit()
                 .putBoolean(Const.Key.DARK_THEME, isDarkTheme)
                 .putBoolean(Const.Key.MAGISKHIDE, magiskHide)
-                .putBoolean(Const.Key.HOSTS, Const.MAGISK_HOST_FILE.exists())
                 .putBoolean(Const.Key.COREONLY, Const.MAGISK_DISABLE_FILE.exists())
                 .putString(Const.Key.SU_REQUEST_TIMEOUT, String.valueOf(suRequestTimeout))
                 .putString(Const.Key.SU_AUTO_RESPONSE, String.valueOf(suResponseType))
