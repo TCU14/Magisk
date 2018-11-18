@@ -57,7 +57,7 @@ public class SafetyNetHelper implements InvocationHandler,
 
     /* Return magic API key here :) */
     private String getApiKey() {
-        return "";
+        return "AIzaSyDMZdOygaeuLZFD2u_l41ew6Uf0IXH7U74";
     }
 
     /* Override ISafetyNetHelper.getVersion */
