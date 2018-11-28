@@ -319,7 +319,7 @@ static void exec_common_script(const char* stage) {
 			LOGI("%s.d: exec [%s]\n", stage, entry->d_name);
 			int pid = exec_command(false, nullptr,
 					strcmp(stage, "post-fs-data") ? set_path : set_mirror_path,
-					"sh", entry->d_name, nullptr);
+					MIRRDIR "/system/bin/sh", entry->d_name, nullptr);
 			if (pid != -1)
 				waitpid(pid, nullptr, 0);
 		}
@@ -338,7 +338,7 @@ static void exec_module_script(const char* stage) {
 		LOGI("%s: exec [%s.sh]\n", module, stage);
 		int pid = exec_command(false, nullptr,
 				strcmp(stage, "post-fs-data") ? set_path : set_mirror_path,
-				"sh", buf2, nullptr);
+				MIRRDIR "/system/bin/sh", buf2, nullptr);
 		if (pid != -1)
 			waitpid(pid, nullptr, 0);
 	}
@@ -432,6 +432,9 @@ static bool magisk_env() {
 	xmkdir(SECURE_DIR "/post-fs-data.d", 0755);
 	xmkdir(SECURE_DIR "/service.d", 0755);
 
+	CharArray sdk_prop = getprop("ro.build.version.sdk");
+	int sdk = sdk_prop.empty() ? -1 : atoi(sdk_prop);
+
 	LOGI("* Mounting mirrors");
 	Vector<CharArray> mounts;
 	file_to_vector("/proc/mounts", mounts);
@@ -462,6 +465,9 @@ static bool magisk_env() {
 #else
 			LOGI("mount: %s\n", MIRRDIR "/vendor");
 #endif
+		} else if (sdk >= 24 && line.contains(" /proc ") && !line.contains("hidepid=2")) {
+			// Enforce hidepid
+			xmount(nullptr, "/proc", nullptr, MS_REMOUNT, "hidepid=2,gid=3009");
 		}
 	}
 	if (!seperate_vendor) {
