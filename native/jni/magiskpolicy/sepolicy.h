@@ -19,14 +19,13 @@ extern policydb_t *policydb;
 		for (*ptr = table->htable[_i]; *ptr != NULL; *ptr = (*ptr)->next)
 
 // sepolicy manipulation functions
+void for_each_avtab_node(void (*callback)(avtab_ptr_t));
 int create_domain(const char *d);
 int set_domain_state(const char *s, int state);
-int add_transition(const char *s, const char *t, const char *c, const char *d);
-int add_file_transition(const char *s, const char *t, const char *c, const char *d,
-						const char *filename);
 int add_typeattribute(const char *domainS, const char *attr);
 int add_rule(const char *s, const char *t, const char *c, const char *p, int effect, int n);
 int add_xperm_rule(const char *s, const char *t, const char *c, const char *range, int effect, int n);
+int add_type_rule(const char *s, const char *t, const char *c, const char *d, int effect);
 
 #ifdef __cplusplus
 };

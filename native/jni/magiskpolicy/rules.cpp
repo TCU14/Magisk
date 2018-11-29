@@ -28,6 +28,10 @@ static void allowSuClient(const char *target) {
 }
 
 void sepol_magisk_rules() {
+	// Temp suppress warnings
+	auto bak = log_cb.w;
+	log_cb.w = nop_log;
+
 	// First prevent anything to change sepolicy except ourselves
 	sepol_deny(ALL, "kernel", "security", "load_policy");
 
@@ -165,4 +169,12 @@ void sepol_magisk_rules() {
 
 	// Allow update engine to source addon.d.sh
 	sepol_allow("update_engine", "adb_data_file", "dir", ALL);
+
+	// Remove all dontaudit
+	for_each_avtab_node([](auto p) -> void {
+		if (p->key.specified == AVTAB_AUDITDENY || p->key.specified == AVTAB_XPERMS_DONTAUDIT)
+			avtab_remove_node(&policydb->te_avtab, p);
+	});
+
+	log_cb.w = bak;
 }
