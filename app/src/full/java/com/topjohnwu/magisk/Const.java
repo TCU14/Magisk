@@ -1,5 +1,6 @@
 package com.topjohnwu.magisk;
 
+import android.os.Environment;
 import android.os.Process;
 
 import java.io.File;
@@ -9,7 +10,6 @@ import java.util.List;
 public class Const {
 
     public static final String DEBUG_TAG = "MagiskManager";
-    public static final String ORIG_PKG_NAME = BuildConfig.APPLICATION_ID;
     public static final String MAGISKHIDE_PROP = "persist.magisk.hide";
 
     // APK content
@@ -19,11 +19,13 @@ public class Const {
 
     // Paths
     public static final String MAGISK_PATH = "/sbin/.magisk/img";
+    public static final File EXTERNAL_PATH;
     public static File MAGISK_DISABLE_FILE;
 
     static {
-        /* Prevent crashing on unrooted devices */
         MAGISK_DISABLE_FILE = new File("xxx");
+        EXTERNAL_PATH = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        EXTERNAL_PATH.mkdirs();
     }
 
     public static final String BUSYBOX_PATH = "/sbin/.magisk/busybox";
@@ -61,14 +63,16 @@ public class Const {
         public static final int MAGISK_UPDATE_NOTIFICATION_ID = 4;
         public static final int APK_UPDATE_NOTIFICATION_ID = 5;
         public static final int DTBO_NOTIFICATION_ID = 7;
-        public static final String NOTIFICATION_CHANNEL = "magisk_notification";
+        public static final int HIDE_MANAGER_NOTIFICATION_ID = 8;
+        public static final String UPDATE_NOTIFICATION_CHANNEL = "update";
+        public static final String PROGRESS_NOTIFICATION_CHANNEL = "progress";
     }
 
     public static class Url {
         public static final String STABLE_URL = "https://raw.githubusercontent.com/topjohnwu/magisk_files/master/stable.json";
         public static final String BETA_URL = "https://raw.githubusercontent.com/topjohnwu/magisk_files/master/beta.json";
         public static final String IANMACD_URL = "https://raw.githubusercontent.com/ianmacd/MagiskBuilds/master/updates/ianmacd.json";
-        public static final String REPO_URL = "https://api.github.com/users/Magisk-Modules-Repo/repos?per_page=100&sort=pushed&page=%d";
+        public static final String REPO_URL = "https://api.github.com/users/Magisk-Modules-Repo/repos?per_page=100&sort=pushed";
         public static final String FILE_URL = "https://raw.githubusercontent.com/Magisk-Modules-Repo/%s/master/%s";
         public static final String ZIP_URL = "https://github.com/Magisk-Modules-Repo/%s/archive/master.zip";
         public static final String PAYPAL_URL = "https://www.paypal.me/topjohnwu";
@@ -93,10 +97,12 @@ public class Const {
 
         // intents
         public static final String OPEN_SECTION = "section";
-        public static final String INTENT_SET_FILENAME = "filename";
+        public static final String INTENT_SET_NAME = "filename";
         public static final String INTENT_SET_LINK = "link";
         public static final String FLASH_ACTION = "action";
         public static final String FLASH_SET_BOOT = "boot";
+        public static final String BROADCAST_MANAGER_UPDATE = "manager_update";
+        public static final String BROADCAST_REBOOT = "reboot";
 
         // others
         public static final String CHECK_UPDATES = "check_update";

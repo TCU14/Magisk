@@ -45,8 +45,8 @@
 
     <!--Repo Fragment-->
     <string name="update_available">Налице е актуализация.</string>
-    <string name="installed">Инсталиран</string>
-    <string name="not_installed">Не е инсталиран.</string>
+    <string name="installed">Инсталирани</string>
+    <string name="not_installed">Не са инсталирани</string>
     <string name="updated_on">Актуализиран на: %1$s</string>
     <string name="sorting_order">Сортиране</string>
     <string name="sort_by_name">Сортиране по наименование</string>
@@ -90,10 +90,10 @@
     <string name="manager_download_install">Докоснете за изтегляне и инсталиране.</string>
     <string name="dtbo_patched_title">DTBO беше модифициран!</string>
     <string name="dtbo_patched_reboot">Magisk Manager модифицира dtbo.img, моля да рестартирате устройството.</string>
-    <string name="magisk_updates">Актуализации на Magisk</string>
+    <string name="update_channel">Актуализации на Magisk</string>
     <string name="flashing">Инсталиране</string>
-    <string name="hide_manager_toast">Скриване на Magisk Manager…</string>
-    <string name="hide_manager_toast2">Може да отнеме известно време.</string>
+    <string name="hide_manager_title">Скриване на Magisk Manager…</string>
+    <string name="hide_manager_msg">Може да отнеме известно време.</string>
     <string name="hide_manager_fail_toast">Скриването на Magisk Manager бе неуспешно.</string>
     <string name="open_link_failed_toast">Не бе намерено приложение за отваряне на линка.</string>
     <string name="download_zip_only">Изтегляне само на архив</string>
@@ -119,6 +119,9 @@
     <string name="env_fix_msg">Вашето устройство се нуждае от допълнително надстройване на Magisk, за да работи нормално. Ще бъде изтеглен архивът за надстройка на Magisk. Желаете ли да продължите?</string>
     <string name="setup_title">Допълнително надстройване</string>
     <string name="setup_msg">Надстройването на средата е в ход…</string>
+    <string name="download_file_error">Грешка при изтеглянето на файла.</string>
+    <string name="downloading_toast">Изтегляне на %1$s</string>
+    <string name="no_rw_storage">Тази функция няма да работи без разрешение за запис във външната памет.</string>
 
     <!--Settings Activity -->
     <string name="settings_general_category">Общи</string>
