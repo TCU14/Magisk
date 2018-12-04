@@ -52,7 +52,7 @@ public class CheckUpdates {
                 jsonStr = Utils.dlString(Const.Url.BETA_URL);
                 break;
             case Const.Value.IANMACD_CHANNEL:
-                jsonStr = WebService.getString(Const.Url.IANMACD_URL);
+                jsonStr = Utils.dlString(Const.Url.IANMACD_URL);
                 break;
             case Const.Value.CUSTOM_CHANNEL:
                 jsonStr = Utils.dlString(Data.MM().prefs.getString(Const.Key.CUSTOM_CHANNEL, ""));
