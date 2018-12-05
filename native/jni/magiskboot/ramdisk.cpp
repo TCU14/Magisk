@@ -213,7 +213,7 @@ int cpio_commands(int argc, char *argv[]) {
 	while (argc) {
 		// Clean up
 		cmdc = 0;
-		memset(cmdv, NULL, sizeof(cmdv));
+		memset(cmdv, 0, sizeof(cmdv));
 
 		// Split the commands
 		for (char *tok = strtok(argv[0], " "); tok; tok = strtok(nullptr, " "))
