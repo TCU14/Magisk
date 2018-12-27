@@ -32,7 +32,7 @@ import com.topjohnwu.magisk.components.ExpandableView;
 import com.topjohnwu.magisk.components.MagiskInstallDialog;
 import com.topjohnwu.magisk.components.ManagerInstallDialog;
 import com.topjohnwu.magisk.components.UninstallDialog;
-import com.topjohnwu.magisk.utils.Download;
+import com.topjohnwu.net.Networking;
 import com.topjohnwu.superuser.Shell;
 import com.topjohnwu.superuser.ShellUtils;
 
@@ -111,8 +111,6 @@ public class MagiskFragment extends BaseFragment
 
     @OnClick(R.id.install_button)
     void install() {
-        shownDialog = true;
-
         // Show Manager update first
         if (Data.remoteManagerVersionCode > BuildConfig.VERSION_CODE) {
             new ManagerInstallDialog((BaseActivity) requireActivity()).show();
@@ -169,7 +167,7 @@ public class MagiskFragment extends BaseFragment
         shownDialog = false;
 
         // Trigger state check
-        if (Download.checkNetworkStatus(app)) {
+        if (Networking.checkNetworkStatus(app)) {
             CheckUpdates.check();
         } else {
             mSwipeRefreshLayout.setRefreshing(false);
@@ -212,7 +210,7 @@ public class MagiskFragment extends BaseFragment
     private void updateUI() {
         ((MainActivity) requireActivity()).checkHideSection();
 
-        boolean hasNetwork = Download.checkNetworkStatus(app);
+        boolean hasNetwork = Networking.checkNetworkStatus(app);
         boolean hasRoot = Shell.rootAccess();
 
         magiskUpdate.setVisibility(hasNetwork ? View.VISIBLE : View.GONE);
@@ -267,13 +265,9 @@ public class MagiskFragment extends BaseFragment
         magiskUpdateProgress.setVisibility(View.GONE);
         mSwipeRefreshLayout.setRefreshing(false);
 
-        if (!shownDialog) {
-            if (Data.remoteMagiskVersionCode > Data.magiskVersionCode
-                    || Data.remoteManagerVersionCode > BuildConfig.VERSION_CODE) {
-                install();
-            } else if (!ShellUtils.fastCmdResult("env_check")) {
-                new EnvFixDialog(requireActivity()).show();
-            }
+        if (!shownDialog && !ShellUtils.fastCmdResult("env_check")) {
+            shownDialog = true;
+            new EnvFixDialog(requireActivity()).show();
         }
     }
 
