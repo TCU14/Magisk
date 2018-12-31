@@ -19,6 +19,8 @@ import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 
+import dalvik.system.DexClassLoader;
+
 public class DownloadApp {
 
     public static void upgrade(String name) {
@@ -32,7 +34,7 @@ public class DownloadApp {
     }
 
     private static void dlInstall(String name, ManagerDownloadListener listener) {
-        File apk = new File(App.self.getFilesDir(), "manager.apk");
+        File apk = new File(App.self.getCacheDir(), "manager.apk");
         ProgressNotification progress = new ProgressNotification(name);
         listener.setProgressNotification(progress);
         Networking.get(Data.managerLink)
@@ -72,11 +74,16 @@ public class DownloadApp {
                 progress.update();
                 patched = new File(apk.getParent(), "patched.apk");
                 try {
-                    JarMap jarMap = new JarMap(apk);
-                    PatchAPK.patch(jarMap, app.getPackageName());
-                    SignAPK.sign(jarMap, new BufferedOutputStream(new FileOutputStream(patched)));
+                    // Try using the new APK to patch itself
+                    ClassLoader loader = new DexClassLoader(apk.getPath(),
+                            apk.getParent(), null, ClassLoader.getSystemClassLoader());
+                    loader.loadClass("a.a")
+                            .getMethod("patchAPK", String.class, String.class, String.class)
+                            .invoke(null, apk.getPath(), patched.getPath(), app.getPackageName());
                 } catch (Exception e) {
-                    return;
+                    e.printStackTrace();
+                    // Fallback to use the current implementation
+                    PatchAPK.patch(apk.getPath(), patched.getPath(), app.getPackageName());
                 }
             }
             APKInstall.install(app, patched);
