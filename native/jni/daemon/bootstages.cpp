@@ -52,7 +52,7 @@ extern void auto_start_magiskhide();
 
 class node_entry {
 public:
-	node_entry(const char *, uint8_t status = 0, uint8_t type = 0);
+	explicit node_entry(const char *, uint8_t status = 0, uint8_t type = 0);
 	~node_entry();
 	void create_module_tree(const char *module);
 	void magic_mount();
@@ -436,19 +436,16 @@ static bool magisk_env() {
 	xmkdir(SECURE_DIR "/post-fs-data.d", 0755);
 	xmkdir(SECURE_DIR "/service.d", 0755);
 
-	auto sdk_prop = getprop("ro.build.version.sdk");
-	int sdk = sdk_prop.empty() ? -1 : atoi(sdk_prop.c_str());
-
 	LOGI("* Mounting mirrors");
 	auto mounts = file_to_vector("/proc/mounts");
 	bool system_as_root = false;
 	for (auto &line : mounts) {
-		if (line.find(" /system_root ") != string::npos) {
+		if (str_contains(line, " /system_root ")) {
 			bind_mount("/system_root/system", MIRRDIR "/system");
 			sscanf(line.c_str(), "%s", buf);
 			system_block = strdup2(buf);
 			system_as_root = true;
-		} else if (!system_as_root && line.find(" /system ") != string::npos) {
+		} else if (!system_as_root && str_contains(line, " /system ")) {
 			sscanf(line.c_str(), "%s %*s %s", buf, buf2);
 			system_block = strdup2(buf);
 			xmount(system_block, MIRRDIR "/system", buf2, MS_RDONLY, nullptr);
@@ -457,7 +454,7 @@ static bool magisk_env() {
 #else
 			LOGI("mount: %s\n", MIRRDIR "/system");
 #endif
-		} else if (line.find(" /vendor ") != string::npos) {
+		} else if (str_contains(line, " /vendor ")) {
 			seperate_vendor = true;
 			sscanf(line.c_str(), "%s %*s %s", buf, buf2);
 			vendor_block = strdup2(buf);
@@ -468,9 +465,8 @@ static bool magisk_env() {
 #else
 			LOGI("mount: %s\n", MIRRDIR "/vendor");
 #endif
-		} else if (sdk >= 24 &&
-		line.find(" /proc ") != string::npos &&
-		line.find("hidepid=2") == string::npos) {
+		} else if (SDK_INT >= 24 &&
+		str_contains(line, " /proc ") && !str_contains(line, "hidepid=2")) {
 			// Enforce hidepid
 			xmount(nullptr, "/proc", nullptr, MS_REMOUNT, "hidepid=2,gid=3009");
 		}
@@ -491,6 +487,13 @@ static bool magisk_env() {
 	LOGI("* Setting up internal busybox");
 	exec_command_sync(MIRRDIR "/bin/busybox", "--install", "-s", BBPATH, nullptr);
 	xsymlink(MIRRDIR "/bin/busybox", BBPATH "/busybox");
+
+	// Disable/remove magiskhide, resetprop, and modules
+	if (SDK_INT < 19) {
+		close(xopen(DISABLEFILE, O_RDONLY | O_CREAT, 0));
+		unlink("/sbin/resetprop");
+		unlink("/sbin/magiskhide");
+	}
 	return true;
 }
 
@@ -773,7 +776,7 @@ void startup() {
 	execl("/sbin/magisk.bin", "magisk", "--post-fs-data", nullptr);
 }
 
-[[noreturn]] static void core_only() {
+[[noreturn]] static inline void core_only() {
 	auto_start_magiskhide();
 	unblock_boot_process();
 }
@@ -794,6 +797,14 @@ void post_fs_data(int client) {
 
 	start_log_daemon();
 
+	// Run common scripts
+	LOGI("* Running post-fs-data.d scripts\n");
+	exec_common_script("post-fs-data");
+
+	// Core only mode
+	if (access(DISABLEFILE, F_OK) == 0)
+		core_only();
+
 	if (!prepare_img()) {
 		LOGE("* Magisk image mount failed, switch to core-only mode\n");
 		free(magiskloop);
@@ -803,14 +814,6 @@ void post_fs_data(int client) {
 
 	restorecon();
 	chmod(SECURE_DIR, 0700);
-
-	// Run common scripts
-	LOGI("* Running post-fs-data.d scripts\n");
-	exec_common_script("post-fs-data");
-
-	// Core only mode
-	if (access(DISABLEFILE, F_OK) == 0)
-		core_only();
 
 	// Execute module scripts
 	LOGI("* Running module post-fs-data scripts\n");
@@ -835,7 +838,7 @@ void post_fs_data(int client) {
 		snprintf(buf, PATH_MAX, "%s/%s/system.prop", MOUNTPOINT, module);
 		if (access(buf, F_OK) == 0) {
 			LOGI("%s: loading [system.prop]\n", module);
-			load_prop_file(buf, 0);
+			load_prop_file(buf, false);
 		}
 		// Check whether enable auto_mount
 		snprintf(buf, PATH_MAX, "%s/%s/auto_mount", MOUNTPOINT, module);
