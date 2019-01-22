@@ -95,7 +95,7 @@ public class MainActivity extends BaseActivity
         // Ensure navigation drawer text and icons are legible with dark theme.
         ColorStateList csl = ColorStateList.valueOf(
                 getResources().getColor(R.color.nav_item_color_dark));
-        if (Data.isDarkTheme) {
+        if (getDarkTheme() != -1 && (boolean) Config.get(Config.Key.DARK_THEME)) {
             csl = ColorStateList.valueOf(
                     getResources().getColor(R.color.nav_item_color_light));
         }
