@@ -1,4 +1,4 @@
-package com.topjohnwu.magisk.components;
+package com.topjohnwu.magisk.dialogs;
 
 import android.app.Activity;
 import android.content.DialogInterface;
@@ -22,9 +22,9 @@ public class CustomAlertDialog extends AlertDialog.Builder {
     private DialogInterface.OnClickListener positiveListener;
     private DialogInterface.OnClickListener negativeListener;
     private DialogInterface.OnClickListener neutralListener;
-    private AlertDialog dialog;
 
-    private ViewHolder vh;
+    protected AlertDialog dialog;
+    protected ViewHolder vh;
 
     public class ViewHolder {
         @BindView(R.id.dialog_layout) public LinearLayout dialogLayout;

@@ -13,7 +13,7 @@
     <string name="checking_for_updates">Checking for updates…</string>
     <string name="magisk_update_available">Magisk v%1$s is available!</string>
     <string name="invalid_update_channel">Invalid Update Channel</string>
-    <string name="safetyNet_check_text">Tap to start SafetyNet check.</string>
+    <string name="safetyNet_check_text">Tap to start SafetyNet check</string>
     <string name="checking_safetyNet_status">Checking SafetyNet status…</string>
     <string name="safetyNet_check_success">SafetyNet Check Success</string>
     <string name="safetyNet_api_error">SafetyNet API Error</string>
@@ -29,6 +29,7 @@
     <string name="uninstall_magisk_title">Uninstall Magisk</string>
     <string name="uninstall_magisk_msg">All modules will be disabled/removed. Root will be removed, and your data potentially encrypted if not already.</string>
     <string name="update">Update</string>
+    <string name="core_only_enabled">(Core only mode enabled)</string>
 
     <!--Module Fragment-->
     <string name="no_info_provided">(No info provided)</string>

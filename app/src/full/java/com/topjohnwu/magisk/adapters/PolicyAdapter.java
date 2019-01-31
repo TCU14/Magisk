@@ -12,11 +12,12 @@ import android.widget.TextView;
 
 import com.google.android.material.snackbar.Snackbar;
 import com.topjohnwu.magisk.R;
-import com.topjohnwu.magisk.components.CustomAlertDialog;
-import com.topjohnwu.magisk.components.ExpandableViewHolder;
-import com.topjohnwu.magisk.components.SnackbarMaker;
 import com.topjohnwu.magisk.container.Policy;
 import com.topjohnwu.magisk.database.MagiskDB;
+import com.topjohnwu.magisk.dialogs.CustomAlertDialog;
+import com.topjohnwu.magisk.dialogs.FingerprintAuthDialog;
+import com.topjohnwu.magisk.uicomponents.ExpandableViewHolder;
+import com.topjohnwu.magisk.uicomponents.SnackbarMaker;
 import com.topjohnwu.magisk.utils.FingerprintHelper;
 
 import java.util.List;
@@ -85,12 +86,12 @@ public class PolicyAdapter extends RecyclerView.Adapter<PolicyAdapter.ViewHolder
                     dbHelper.updatePolicy(policy);
                 }
             };
-            if (FingerprintHelper.useFingerPrint()) {
+            if (FingerprintHelper.useFingerprint()) {
                 holder.masterSwitch.setChecked(!isChecked);
-                FingerprintHelper.showAuthDialog((Activity) v.getContext(), () -> {
+                new FingerprintAuthDialog((Activity) v.getContext(), () -> {
                     holder.masterSwitch.setChecked(isChecked);
                     r.run();
-                });
+                }).show();
             } else {
                 r.run();
             }

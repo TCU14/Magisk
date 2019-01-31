@@ -1,4 +1,4 @@
-package com.topjohnwu.magisk.receivers;
+package com.topjohnwu.magisk.components;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -9,14 +9,25 @@ import com.topjohnwu.magisk.App;
 import com.topjohnwu.magisk.ClassMap;
 import com.topjohnwu.magisk.Config;
 import com.topjohnwu.magisk.Const;
+import com.topjohnwu.magisk.R;
 import com.topjohnwu.magisk.SuRequestActivity;
-import com.topjohnwu.magisk.components.Notifications;
+import com.topjohnwu.magisk.container.Policy;
+import com.topjohnwu.magisk.uicomponents.Notifications;
+import com.topjohnwu.magisk.uicomponents.Shortcuts;
 import com.topjohnwu.magisk.utils.DownloadApp;
-import com.topjohnwu.magisk.utils.SuConnector;
+import com.topjohnwu.magisk.utils.SuLogger;
 import com.topjohnwu.superuser.Shell;
 import com.topjohnwu.superuser.ShellUtils;
 
 public class GeneralReceiver extends BroadcastReceiver {
+
+    private static SuLogger SU_LOGGER = new SuLogger() {
+        @Override
+        public String getMessage(Policy policy) {
+            return App.self.getString(policy.policy == Policy.ALLOW ?
+                    R.string.su_allow_toast : R.string.su_deny_toast, policy.appName);
+        }
+    };
 
     private String getPkg(Intent i) {
         return i.getData() == null ? "" : i.getData().getEncodedSchemeSpecificPart();
@@ -43,10 +54,10 @@ public class GeneralReceiver extends BroadcastReceiver {
                         app.startActivity(i);
                         break;
                     case "log":
-                        SuConnector.handleLogs(intent);
+                        SU_LOGGER.handleLogs(intent);
                         break;
                     case "notify":
-                        SuConnector.handleNotify(intent);
+                        SU_LOGGER.handleNotify(intent);
                         break;
                     case "boot":
                     default:
@@ -74,6 +85,9 @@ public class GeneralReceiver extends BroadcastReceiver {
                 String pkg = getPkg(intent);
                 app.mDB.deletePolicy(pkg);
                 Shell.su("magiskhide --rm " + pkg).submit();
+                break;
+            case Intent.ACTION_LOCALE_CHANGED:
+                Shortcuts.setup(context);
                 break;
             case Const.Key.BROADCAST_MANAGER_UPDATE:
                 Config.managerLink = intent.getStringExtra(Const.Key.INTENT_SET_LINK);
