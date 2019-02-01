@@ -75,8 +75,8 @@ public class Const {
         public static final String PAYPAL_URL = "https://www.paypal.me/topjohnwu";
         public static final String PATREON_URL = "https://www.patreon.com/topjohnwu";
         public static final String TWITTER_URL = "https://twitter.com/topjohnwu";
-        public static final String XDA_THREAD = "http://forum.xda-developers.com/showthread.php?t=3432382";
-        public static final String SOURCE_CODE_URL = "https://github.com/topjohnwu/Magisk";
+        public static final String XDA_THREAD = "https://forum.xda-developers.com/apps/magisk/unofficial-magisk-v10-beta-built-t3521901";
+        public static final String SOURCE_CODE_URL = "https://github.com/ianmacd/Magisk/commits/master";
         public static final String SNET_URL = "https://raw.githubusercontent.com/topjohnwu/magisk_files/b66b1a914978e5f4c4bbfd74a59f4ad371bac107/snet.apk";
     }
 
