@@ -51,7 +51,7 @@ public class MainActivity extends BaseActivity
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
-        if (!app.init) {
+        if (!getIntent().getBooleanExtra(Const.Key.FROM_SPLASH, false)) {
             startActivity(new Intent(this, ClassMap.get(SplashActivity.class)));
             finish();
         }
