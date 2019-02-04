@@ -66,8 +66,11 @@ public class Const {
     }
 
     public static class Url {
-        public static final String STABLE_URL = "https://raw.githubusercontent.com/topjohnwu/magisk_files/master/stable.json";
-        public static final String BETA_URL = "https://raw.githubusercontent.com/topjohnwu/magisk_files/master/beta.json";
+        private static String getRaw(String where, String name) {
+            return String.format("https://raw.githubusercontent.com/topjohnwu/magisk_files/%s/%s", where, name);
+        }
+        public static final String STABLE_URL = getRaw("master", "stable.json");
+        public static final String BETA_URL = getRaw("master", "beta.json");
         public static final String IANMACD_URL = "https://raw.githubusercontent.com/ianmacd/MagiskBuilds/master/updates/ianmacd.json";
         public static final String REPO_URL = "https://api.github.com/users/Magisk-Modules-Repo/repos?per_page=100&sort=pushed&page=%d";
         public static final String FILE_URL = "https://raw.githubusercontent.com/Magisk-Modules-Repo/%s/master/%s";
@@ -77,7 +80,8 @@ public class Const {
         public static final String TWITTER_URL = "https://twitter.com/topjohnwu";
         public static final String XDA_THREAD = "https://forum.xda-developers.com/apps/magisk/unofficial-magisk-v10-beta-built-t3521901";
         public static final String SOURCE_CODE_URL = "https://github.com/ianmacd/Magisk/commits/master";
-        public static final String SNET_URL = "https://raw.githubusercontent.com/topjohnwu/magisk_files/b66b1a914978e5f4c4bbfd74a59f4ad371bac107/snet.apk";
+        public static final String SNET_URL = getRaw("b66b1a914978e5f4c4bbfd74a59f4ad371bac107", "snet.apk");
+        public static final String BOOTCTL_URL = getRaw("9c5dfc1b8245c0b5b524901ef0ff0f8335757b77", "bootctl");
     }
 
     public static class Key {
