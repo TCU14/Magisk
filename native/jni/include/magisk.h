@@ -10,7 +10,9 @@
 #define LOG_SOCKET   "5864cd77f2f8c59b3882e2d35dbf51e4"
 #define JAVA_PACKAGE_NAME "com.topjohnwu.magisk"
 #define LOGFILE         "/cache/magisk.log"
-#define UNBLOCKFILE     "/dev/.magisk.unblock"
+#define UNBLOCKFILE     "/dev/.magisk_unblock"
+#define EARLYINIT       "/dev/.magisk_early_init"
+#define EARLYINITDONE   "/dev/.magisk_early_init_done"
 #define DISABLEFILE     "/cache/.disable_magisk"
 #define MAGISKTMP       "/sbin/.magisk"
 #define BLOCKDIR        MAGISKTMP "/block"
@@ -25,7 +27,6 @@
 #define SIMPLEMOUNT     SECURE_DIR "/magisk_simple"
 #define BOOTCOUNT       SECURE_DIR "/.boot_count"
 #define MANAGERAPK      DATABIN "/magisk.apk"
-#define MAGISKRC        "/init.magisk.rc"
 
 // selinux consts
 #define SELINUX_PATH        "/sys/fs/selinux"
@@ -35,8 +36,6 @@
 #define SELINUX_CONTEXT     SELINUX_PATH "/context"
 #define SEPOL_PROC_DOMAIN "magisk"
 #define SEPOL_FILE_DOMAIN "magisk_file"
-
-#define MAGISKHIDE_PROP     "persist.magisk.hide"
 
 extern char *argv0;     /* For changing process name */
 extern int SDK_INT;

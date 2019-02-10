@@ -4,12 +4,12 @@
 #include <libgen.h>
 #include <string.h>
 
-#include "utils.h"
-#include "magisk.h"
-#include "daemon.h"
-#include "selinux.h"
-#include "db.h"
-#include "flags.h"
+#include <utils.h>
+#include <magisk.h>
+#include <daemon.h>
+#include <selinux.h>
+#include <db.h>
+#include <flags.h>
 
 [[noreturn]] static void usage() {
 	fprintf(stderr,
@@ -31,7 +31,7 @@
   		"   --sqlite SQL              exec SQL to Magisk database\n"
 		"\n"
 		"Supported init triggers:\n"
-		"   startup, post-fs-data, service, boot-complete\n"
+		"   post-fs-data, service, boot-complete\n"
 		"\n"
 		"Supported applets:\n");
 
@@ -77,9 +77,6 @@ int magisk_main(int argc, char *argv[]) {
 		int fd = connect_daemon();
 		write_int(fd, DO_NOTHING);
 		return 0;
-	} else if (strcmp(argv[1], "--startup") == 0) {
-		startup();
-		return 0;
 	} else if (strcmp(argv[1], "--post-fs-data") == 0) {
 		int fd = connect_daemon();
 		write_int(fd, POST_FS_DATA);
@@ -99,6 +96,11 @@ int magisk_main(int argc, char *argv[]) {
 		send_fd(fd, STDOUT_FILENO);
 		return read_int(fd);
 	}
-
+#if 0
+	/* Entry point for testing stuffs */
+	else if (strcmp(argv[1], "--test") == 0) {
+		return 0;
+	}
+#endif
 	usage();
 }
