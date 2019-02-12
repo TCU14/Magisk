@@ -13,7 +13,7 @@
 
 [[noreturn]] static void usage() {
 	fprintf(stderr,
-		"Magisk v" xstr(MAGISK_VERSION) "(" xstr(MAGISK_VER_CODE) ") (by topjohnwu) multi-call binary\n"
+		FULL_VER(Magisk) " multi-call binary\n"
 		"\n"
 		"Usage: magisk [applet [arguments]...]\n"
 		"   or: magisk [options]...\n"
@@ -25,9 +25,12 @@
 		"   --list                    list all available applets\n"
 		"   --daemon                  manually start magisk daemon\n"
 		"   --[init trigger]          start service for init trigger\n"
+		"\n"
+		"Advanced Options (Internal APIs):"
 		"   --unlock-blocks           set BLKROSET flag to OFF for all block devices\n"
-		"   --restorecon              fix selinux context on Magisk files and folders\n"
+		"   --restorecon              restore selinux context on Magisk files\n"
 		"   --clone-attr SRC DEST     clone permission, owner, and selinux context\n"
+		"   --clone SRC DEST          clone SRC to DEST\n"
   		"   --sqlite SQL              exec SQL to Magisk database\n"
 		"\n"
 		"Supported init triggers:\n"
@@ -45,7 +48,7 @@ int magisk_main(int argc, char *argv[]) {
 	if (argc < 2)
 		usage();
 	if (strcmp(argv[1], "-c") == 0) {
-		printf("%s (%d)\n", xstr(MAGISK_VERSION) ":MAGISK", MAGISK_VER_CODE);
+		printf(MAGISK_VERSION ":MAGISK (" str(MAGISK_VER_CODE) ")\n");
 		return 0;
 	} else if (strcmp(argv[1], "-v") == 0) {
 		int fd = connect_daemon();
@@ -72,6 +75,10 @@ int magisk_main(int argc, char *argv[]) {
 	} else if (strcmp(argv[1], "--clone-attr") == 0) {
 		if (argc < 4) usage();
 		clone_attr(argv[2], argv[3]);
+		return 0;
+	} else if (strcmp(argv[1], "--clone") == 0) {
+		if (argc < 4) usage();
+		cp_afc(argv[2], argv[3]);
 		return 0;
 	} else if (strcmp(argv[1], "--daemon") == 0) {
 		int fd = connect_daemon();
