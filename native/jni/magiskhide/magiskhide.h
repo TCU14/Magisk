@@ -4,10 +4,15 @@
 #include <pthread.h>
 #include <vector>
 #include <string>
+#include <set>
 
 #include "daemon.h"
 
 #define TERM_THREAD SIGUSR1
+
+#define SAFETYNET_COMPONENT  "com.google.android.gms/.droidguard.DroidGuardService"
+#define SAFETYNET_PROCESS    "com.google.android.gms.unstable"
+#define SAFETYNET_PKG        "com.google.android.gms"
 
 // Daemon entries
 int launch_magiskhide(int client);
@@ -16,6 +21,9 @@ int add_list(int client);
 int rm_list(int client);
 void ls_list(int client);
 
+// Update APK list for inotify
+void update_inotify_mask();
+
 // Process monitor
 void proc_monitor();
 
@@ -23,14 +31,13 @@ void proc_monitor();
 void manage_selinux();
 void hide_sensitive_props();
 void clean_magisk_props();
-
-// List managements
-int add_list(const char *proc);
-bool init_list();
+void refresh_uid();
 
 extern bool hide_enabled;
 extern pthread_mutex_t list_lock;
 extern std::vector<std::string> hide_list;
+extern std::set<uid_t> hide_uid;
+extern int gms_uid;
 
 enum {
 	LAUNCH_MAGISKHIDE,
@@ -42,8 +49,7 @@ enum {
 };
 
 enum {
-	LOGCAT_DISABLED = DAEMON_LAST,
-	HIDE_IS_ENABLED,
+	HIDE_IS_ENABLED = DAEMON_LAST,
 	HIDE_NOT_ENABLED,
 	HIDE_ITEM_EXIST,
 	HIDE_ITEM_NOT_EXIST
