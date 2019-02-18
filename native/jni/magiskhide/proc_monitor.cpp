@@ -21,6 +21,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <algorithm>
 
 #include <magisk.h>
 #include <utils.h>
@@ -32,6 +33,7 @@ using namespace std;
 extern char *system_block, *vendor_block, *data_block;
 
 static int inotify_fd = -1;
+static set<int> hide_uid;
 
 // Workaround for the lack of pthread_cancel
 static void term_thread(int) {
@@ -57,9 +59,6 @@ static inline void lazy_unmount(const char* mountpoint) {
 		LOGD("hide_daemon: Unmounted (%s)\n", mountpoint);
 }
 
-/* APK monitoring doesn't seem to require checking namespace
- * separation from PPID. Preserve this function just in case */
-#if 0
 static inline int parse_ppid(const int pid) {
 	char path[32];
 	int ppid;
@@ -75,16 +74,15 @@ static inline int parse_ppid(const int pid) {
 
 	return ppid;
 }
-#endif
 
-static bool is_pid_safetynet_process(const int pid) {
+static bool is_snet(const int pid) {
 	char path[32];
 	char buf[64];
 	int fd;
 	ssize_t len;
 
 	sprintf(path, "/proc/%d/cmdline", pid);
-	fd = open(path, O_RDONLY);
+	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd == -1)
 		return false;
 
@@ -97,41 +95,36 @@ static bool is_pid_safetynet_process(const int pid) {
 }
 
 static void hide_daemon(int pid) {
-	LOGD("hide_daemon: handling PID=[%d]\n", pid);
-
 	char buffer[4096];
-	vector<string> mounts;
-
-	manage_selinux();
-	clean_magisk_props();
-
 	if (switch_mnt_ns(pid))
 		goto exit;
 
+	LOGD("hide_daemon: handling PID=[%d]\n", pid);
+	manage_selinux();
+	clean_magisk_props();
 	snprintf(buffer, sizeof(buffer), "/proc/%d", pid);
 	chdir(buffer);
 
-	mounts = file_to_vector("mounts");
 	// Unmount dummy skeletons and /sbin links
-	for (auto &s : mounts) {
+	file_readline("mounts", [&](string_view &s) -> bool {
 		if (str_contains(s, "tmpfs /system/") || str_contains(s, "tmpfs /vendor/") ||
 			str_contains(s, "tmpfs /sbin")) {
-			sscanf(s.c_str(), "%*s %4096s", buffer);
+			sscanf(s.data(), "%*s %4096s", buffer);
 			lazy_unmount(buffer);
 		}
-	}
-
-	// Re-read mount infos
-	mounts = file_to_vector("mounts");
+		return true;
+	});
 
 	// Unmount everything under /system, /vendor, and data mounts
-	for (auto &s : mounts) {
+	file_readline("mounts", [&](string_view &s) -> bool {
 		if ((str_contains(s, " /system/") || str_contains(s, " /vendor/")) &&
-			(str_contains(s, system_block) || str_contains(s, vendor_block) || str_contains(s, data_block))) {
-			sscanf(s.c_str(), "%*s %4096s", buffer);
+			(str_contains(s, system_block) || str_contains(s, vendor_block) ||
+			 str_contains(s, data_block))) {
+			sscanf(s.data(), "%*s %4096s", buffer);
 			lazy_unmount(buffer);
 		}
-	}
+		return true;
+	});
 
 exit:
 	// Send resume signal
@@ -147,11 +140,15 @@ static bool process_pid(int pid) {
 	if (pid <= 1000)
 		return true;
 
-	struct stat ns;
+	struct stat ns, pns;
+	int ppid;
 	int uid = get_uid(pid);
 	if (hide_uid.count(uid)) {
 		// Make sure we can read mount namespace
-		if (read_ns(pid, &ns))
+		if ((ppid = parse_ppid(pid)) < 0 || read_ns(pid, &ns) || read_ns(ppid, &pns))
+			return true;
+		// mount namespace is not separated, we only unmount once
+		if (ns.st_dev == pns.st_dev && ns.st_ino == pns.st_ino)
 			return true;
 
 		// Check if it's a process we haven't already hijacked
@@ -161,7 +158,7 @@ static bool process_pid(int pid) {
 
 		if (uid == gms_uid) {
 			// Check /proc/uid/cmdline to see if it's SAFETYNET_PROCESS
-			if (!is_pid_safetynet_process(pid))
+			if (!is_snet(pid))
 				return true;
 
 			LOGD("proc_monitor: " SAFETYNET_PROCESS "\n");
@@ -194,107 +191,76 @@ static int xinotify_add_watch(int fd, const char* path, uint32_t mask) {
 	return ret;
 }
 
-static char *append_path(char *eof, const char *name) {
-	*(eof++) = '/';
-	char c;
-	while ((c = *(name++)))
-		*(eof++) = c;
-	*eof = '\0';
-	return eof;
-}
-
-#define DATA_APP "/data/app"
 static int new_inotify;
-static int data_app_wd;
-static vector<bool> app_in_data;
-static void find_apks(char *path, char *eof) {
-	DIR *dir = opendir(path);
-	if (dir == nullptr)
-		return;
+static const string_view APK_EXT(".apk");
+static vector<string> hide_apks;
 
-	struct dirent *entry;
-	char *dash;
-	for (; (entry = xreaddir(dir)); *eof = '\0') {
-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-			continue;
-		if (entry->d_type == DT_DIR) {
-			find_apks(path, append_path(eof, entry->d_name));
-		} else if (strend(entry->d_name, ".apk") == 0) {
-			append_path(eof, entry->d_name);
-			/* Supported path will be in either format:
-			 * /data/app/[pkg]-[hash or 1 or 2]/base.apk
-			 * /data/app/[pkg]-[1 or 2].apk */
-			if ((dash = strchr(path, '-')) == nullptr)
-				continue;
-			*dash = '\0';
-			for (int i = 0; i < hide_list.size(); ++i) {
-				if (hide_list[i] == path + sizeof(DATA_APP)) {
-					*dash = '-';
-					append_path(eof, entry->d_name);
-					xinotify_add_watch(new_inotify, path, IN_OPEN | IN_DELETE);
-					app_in_data[i] = true;
-					break;
+static bool parse_packages_xml(string_view &s) {
+	if (!str_starts(s, "<package "))
+		return true;
+	/* <package key1="value1" key2="value2"....> */
+	char *start = (char *) s.data();
+	start[s.length() - 2] = '\0';  /* Remove trailing '>' */
+	char key[32], value[1024];
+	char *tok;
+	start += 9;  /* Skip '<package ' */
+	while ((tok = strtok_r(nullptr, " ", &start))) {
+		sscanf(tok, "%[^=]=\"%[^\"]", key, value);
+		string_view value_view(value);
+		if (strcmp(key, "name") == 0) {
+			if (std::count(hide_list.begin(), hide_list.end(), value_view) == 0)
+				return true;
+		} else if (strcmp(key, "codePath") == 0) {
+			if (ends_with(value_view, APK_EXT)) {
+				// Directly add to inotify list
+				hide_apks.emplace_back(value);
+			} else {
+				DIR *dir = opendir(value);
+				if (dir == nullptr)
+					return true;
+				struct dirent *entry;
+				while ((entry = xreaddir(dir))) {
+					if (ends_with(entry->d_name, APK_EXT)) {
+						strcpy(value + value_view.length(), "/");
+						strcpy(value + value_view.length() + 1, entry->d_name);
+						hide_apks.emplace_back(value);
+						break;
+					}
 				}
+				closedir(dir);
 			}
-			*dash = '-';
-			break;
+		} else if (strcmp(key, "userId") == 0 || strcmp(key, "sharedUserId") == 0) {
+			hide_uid.insert(parse_int(value));
 		}
 	}
-	closedir(dir);
+	return true;
 }
 
-// Iterate through /data/app and search all .apk files
-void update_inotify_mask(bool refresh) {
-	char buf[4096];
-
+void update_inotify_mask() {
 	new_inotify = inotify_init();
 	if (new_inotify < 0) {
 		LOGE("proc_monitor: Cannot initialize inotify: %s\n", strerror(errno));
 		term_thread(TERM_THREAD);
 	}
+	fcntl(new_inotify, F_SETFD, FD_CLOEXEC);
 
 	LOGD("proc_monitor: Updating inotify list\n");
-	strcpy(buf, DATA_APP);
-	app_in_data.clear();
-	bool reinstall = false;
+	hide_apks.clear();
 	{
 		MutexGuard lock(list_lock);
-		app_in_data.resize(hide_list.size(), false);
-		find_apks(buf, buf + sizeof(DATA_APP) - 1);
-		// Stop monitoring /data/app
-		if (inotify_fd >= 0)
-			inotify_rm_watch(inotify_fd, data_app_wd);
-		// All apps on the hide list should be installed in data
-		auto it = hide_list.begin();
-		for (bool in_data : app_in_data) {
-			if (!in_data) {
-				if (reinstall_apk(it->c_str()) != 0) {
-					// Reinstallation failed, remove from hide list
-					hide_list.erase(it);
-					refresh = true;
-					continue;
-				}
-				reinstall = true;
-			}
-			it++;
-		}
-		if (refresh && !reinstall)
-			refresh_uid();
-	}
-	if (reinstall) {
-		// Rerun detection
-		close(new_inotify);
-		update_inotify_mask(refresh);
-		return;
+		hide_uid.clear();
+		file_readline("/data/system/packages.xml", parse_packages_xml, true);
 	}
 
-	// Add /data/app itself to the watch list to detect app (un)installations/updates
-	data_app_wd = xinotify_add_watch(new_inotify, DATA_APP, IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE);
-
+	// Swap out and close old inotify_fd
 	int tmp = inotify_fd;
 	inotify_fd = new_inotify;
 	if (tmp >= 0)
 		close(tmp);
+
+	for (auto apk : hide_apks)
+		xinotify_add_watch(inotify_fd, apk.data(), IN_OPEN);
+	xinotify_add_watch(inotify_fd, "/data/system", IN_CLOSE_WRITE);
 }
 
 void proc_monitor() {
@@ -311,20 +277,19 @@ void proc_monitor() {
 
 	// Read inotify events
 	ssize_t len;
-	char buf[4096];
+	char buf[512];
 	auto event = reinterpret_cast<inotify_event *>(buf);
 	while ((len = read(inotify_fd, buf, sizeof(buf))) >= 0) {
 		if (len < sizeof(*event))
 			continue;
-
 		if (event->mask & IN_OPEN) {
 			// Since we're just watching files,
 			// extracting file name is not possible from querying event
 			MutexGuard lock(list_lock);
 			crawl_procfs(process_pid);
-		} else if (!(event->mask & IN_IGNORED)) {
-			LOGD("proc_monitor: inotify: /data/app change detected\n");
-			update_inotify_mask(true);
+		} else if ((event->mask & IN_CLOSE_WRITE) && strcmp(event->name, "packages.xml") == 0) {
+			LOGD("proc_monitor: /data/system/packages.xml updated\n");
+			update_inotify_mask();
 		}
 	}
 	PLOGE("proc_monitor: read inotify");
