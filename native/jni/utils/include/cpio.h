@@ -27,9 +27,12 @@ struct cpio_entry : public cpio_entry_base {
 	std::string filename;
 
 	cpio_entry() = default;
-	explicit cpio_entry(const char *name) : filename(name) {}
-	cpio_entry(int fd, cpio_newc_header &header);
-	~cpio_entry() override;
+	explicit cpio_entry(const char *name, uint32_t mode) : filename(name) {
+		this->mode = mode;
+	}
+	explicit cpio_entry(cpio_newc_header *h) : cpio_entry_base(h) {}
+
+	~cpio_entry() override { free(data); };
 };
 
 typedef std::map<std::string_view, std::unique_ptr<cpio_entry_base>> entry_map;
@@ -59,6 +62,7 @@ public:
 
 protected:
 	void mv(entry_map::iterator &it, const char *to);
+	void load_cpio(char *buf, size_t sz);
 };
 
 class cpio_mmap : public cpio {
