@@ -32,7 +32,7 @@ static bool seperate_vendor;
 
 char *system_block, *vendor_block, *data_block;
 
-static int bind_mount(const char *from, const char *to);
+static int bind_mount(const char *from, const char *to, bool log = true);
 extern void auto_start_magiskhide();
 
 /***************
@@ -48,7 +48,7 @@ extern void auto_start_magiskhide();
 // Precedence: MODULE > SKEL > INTER > DUMMY
 #define IS_DUMMY   0x01    /* mount from mirror */
 #define IS_INTER   0x02    /* intermediate node */
-#define IS_SKEL    0x04    /* mount from skeleton */
+#define IS_SKEL    0x04    /* replace with tmpfs */
 #define IS_MODULE  0x08    /* mount from module */
 
 #define IS_DIR(n)  ((n)->type == DT_DIR)
@@ -57,7 +57,8 @@ extern void auto_start_magiskhide();
 
 class node_entry {
 public:
-	explicit node_entry(const char *, uint8_t status = 0, uint8_t type = 0);
+	explicit node_entry(const char *name, uint8_t status = 0, uint8_t type = 0)
+			: name(name), type(type), status(status), parent(nullptr) {}
 	~node_entry();
 	void create_module_tree(const char *module);
 	void magic_mount();
@@ -71,29 +72,25 @@ private:
 	node_entry *parent;
 	vector<node_entry *> children;
 
-	node_entry(const char *, const char *, uint8_t type);
-	bool is_root();
+	node_entry(node_entry *parent, const char *module, const char *name, uint8_t type)
+			: node_entry(name, 0, type) {
+		this->parent = parent;
+		this->module = module;
+	}
+	bool is_vendor();
 	string get_path();
-	node_entry *insert(node_entry *);
+	void insert(node_entry *&);
 	void clone_skeleton();
 	int get_path(char *path);
 };
-
-node_entry::node_entry(const char *name, uint8_t status, uint8_t type)
-		: name(name), type(type), status(status), parent(nullptr) {}
-
-node_entry::node_entry(const char *module, const char *name, uint8_t type)
-		: node_entry(name, (uint8_t) 0, type) {
-	this->module = module;
-}
 
 node_entry::~node_entry() {
 	for (auto &node : children)
 		delete node;
 }
 
-bool node_entry::is_root() {
-	return parent == nullptr;
+bool node_entry::is_vendor() {
+	return parent ? (parent->parent ? false : name == "vendor") : false;
 }
 
 string node_entry::get_path() {
@@ -109,7 +106,7 @@ int node_entry::get_path(char *path) {
 	return len;
 }
 
-node_entry *node_entry::insert(node_entry *node) {
+void node_entry::insert(node_entry *&node) {
 	node->parent = this;
 	for (auto &child : children) {
 		if (child->name == node->name) {
@@ -117,15 +114,14 @@ node_entry *node_entry::insert(node_entry *node) {
 				// The new node has higher precedence
 				delete child;
 				child = node;
-				return node;
 			} else {
 				delete node;
-				return child;
+				node = child;
 			}
+			return;
 		}
 	}
 	children.push_back(node);
-	return node;
 }
 
 void node_entry::create_module_tree(const char *module) {
@@ -134,7 +130,6 @@ void node_entry::create_module_tree(const char *module) {
 
 	auto full_path = get_path();
 	snprintf(buf, PATH_MAX, "%s/%s%s", MODULEROOT, module, full_path.c_str());
-
 	if (!(dir = xopendir(buf)))
 		return;
 
@@ -142,8 +137,12 @@ void node_entry::create_module_tree(const char *module) {
 		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
 			continue;
 		// Create new node
-		auto node = new node_entry(module, entry->d_name, entry->d_type);
+		auto node = new node_entry(this, module, entry->d_name, entry->d_type);
+
+		// buf = real path, buf2 = module path
 		snprintf(buf, PATH_MAX, "%s/%s", full_path.c_str(), entry->d_name);
+		int eo2 = snprintf(buf2, PATH_MAX, MODULEROOT "/%s%s/%s",
+				module, full_path.c_str(), entry->d_name);
 
 		/*
 		 * Clone the parent in the following condition:
@@ -154,7 +153,7 @@ void node_entry::create_module_tree(const char *module) {
 		bool clone = false;
 		if (IS_LNK(node) || access(buf, F_OK) == -1) {
 			clone = true;
-		} else if (!is_root() || node->name != "vendor") {
+		} else if (!node->is_vendor()) {
 			struct stat s;
 			xstat(buf, &s);
 			if (S_ISLNK(s.st_mode))
@@ -165,23 +164,27 @@ void node_entry::create_module_tree(const char *module) {
 			// Mark self as a skeleton
 			status |= IS_SKEL;  /* This will not overwrite if parent is module */
 			node->status = IS_MODULE;
-		} else if (IS_DIR(node)) {
-			// Check if marked as replace
-			snprintf(buf2, PATH_MAX, "%s/%s%s/.replace", MODULEROOT, module, buf);
-			if (access(buf2, F_OK) == 0) {
-				// Replace everything, mark as leaf
+		} else {
+			// Clone attributes from real path
+			clone_attr(buf, buf2);
+			if (IS_DIR(node)) {
+				// Check if marked as replace
+				strcpy(buf2 + eo2, "/.replace");
+				if (access(buf2, F_OK) == 0) {
+					// Replace everything, mark as leaf
+					node->status = IS_MODULE;
+				} else {
+					// This will be an intermediate node
+					node->status = IS_INTER;
+				}
+			} else if (IS_REG(node)) {
+				// This is a file, mark as leaf
 				node->status = IS_MODULE;
-			} else {
-				// This will be an intermediate node
-				node->status = IS_INTER;
 			}
-		} else if (IS_REG(node)) {
-			// This is a file, mark as leaf
-			node->status = IS_MODULE;
 		}
-		node = insert(node);
-		if (node->status & (IS_SKEL | IS_INTER)) {
-			// Intermediate folder, travel deeper
+		insert(node);
+		if (IS_DIR(node)) {
+			// Recursive traverse through everything
 			node->create_module_tree(module);
 		}
 	}
@@ -225,7 +228,7 @@ void node_entry::clone_skeleton() {
 			close(creat(buf, 0644));
 		// Links will be handled later
 
-		if (is_root() && child->name == "vendor") {
+		if (child->is_vendor()) {
 			if (seperate_vendor) {
 				cp_afc(MIRRDIR "/system/vendor", "/system/vendor");
 				VLOGI("copy_link ", "/system/vendor", MIRRDIR "/system/vendor");
@@ -234,7 +237,7 @@ void node_entry::clone_skeleton() {
 			continue;
 		} else if (child->status & IS_MODULE) {
 			// Mount from module file to dummy file
-			snprintf(buf2, PATH_MAX, "%s/%s%s/%s", MODULEROOT,
+			snprintf(buf2, PATH_MAX, "%s/%s%s/%s", MODULEMNT,
 					 child->module, full_path.c_str(), child->name.c_str());
 		} else if (child->status & (IS_SKEL | IS_INTER)) {
 			// It's an intermediate folder, recursive clone
@@ -260,7 +263,7 @@ void node_entry::magic_mount() {
 	if (status & IS_MODULE) {
 		// Mount module item
 		auto real_path = get_path();
-		snprintf(buf, PATH_MAX, "%s/%s%s", MODULEROOT, module, real_path.c_str());
+		snprintf(buf, PATH_MAX, "%s/%s%s", MODULEMNT, module, real_path.c_str());
 		bind_mount(buf, real_path.c_str());
 	} else if (status & IS_SKEL) {
 		// The node is labeled to be cloned with skeleton, lets do it
@@ -270,13 +273,13 @@ void node_entry::magic_mount() {
 		for (auto &child : children)
 			child->magic_mount();
 	}
-	// The only thing goes here should be vendor placeholder
+	// The only thing goes here should be placeholder nodes
 	// There should be no dummies, so don't need to handle it here
 }
 
 node_entry *node_entry::extract(const char *name) {
 	node_entry *node = nullptr;
-	// Extract the vendor node out of system tree and swap with placeholder
+	// Extract the node out and swap with placeholder
 	for (auto &child : children) {
 		if (child->name == name) {
 			node = child;
@@ -328,9 +331,9 @@ static void simple_mount(const char *path) {
  * Miscellaneous *
  *****************/
 
-static int bind_mount(const char *from, const char *to) {
+static int bind_mount(const char *from, const char *to, bool log) {
 	int ret = xmount(from, to, nullptr, MS_BIND, nullptr);
-	VLOGI("bind_mount", from, to);
+	if (log) VLOGI("bind_mount", from, to);
 	return ret;
 }
 
@@ -362,13 +365,13 @@ static bool magisk_env() {
 
 	// Legacy support
 	symlink(MAGISKTMP, "/sbin/.core");
-	xmkdir(MAGISKTMP "/img", 0755);
+	symlink(MODULEMNT, MAGISKTMP "/img");
 
 	// Create directories in tmpfs overlay
 	xmkdirs(MIRRDIR "/system", 0755);
-	xmkdir(MIRRDIR "/bin", 0755);
+	xmkdir(MIRRDIR "/data", 0755);
 	xmkdir(BBPATH, 0755);
-	xmkdir(BLOCKDIR, 0755);
+	xmkdir(MODULEMNT, 0755);
 
 	// /data/adb directories
 	xmkdir(MODULEROOT, 0755);
@@ -396,8 +399,10 @@ static bool magisk_env() {
 			xmount(vendor_block, MIRRDIR "/vendor", buf2, MS_RDONLY, nullptr);
 			VLOGI("mount", vendor_block, MIRRDIR "/vendor");
 		} else if (str_contains(line, " /data ")) {
-			sscanf(line.data(), "%s", buf);
+			sscanf(line.data(), "%s %*s %s", buf, buf2);
 			data_block = strdup(buf);
+			xmount(data_block, MIRRDIR "/data", buf2, 0, nullptr);
+			VLOGI("mount", data_block, MIRRDIR "/data");
 		} else if (SDK_INT >= 24 &&
 		str_contains(line, " /proc ") && !str_contains(line, "hidepid=2")) {
 			// Enforce hidepid
@@ -410,24 +415,23 @@ static bool magisk_env() {
 		VLOGI("link", MIRRDIR "/system/vendor", MIRRDIR "/vendor");
 	}
 
-	xmkdirs(DATABIN, 0755);
-	bind_mount(DATABIN, MIRRDIR "/bin");
-	if (access(MIRRDIR "/bin/busybox", X_OK) == -1)
+	if (access(DATABIN "/busybox", X_OK) == -1)
 		return false;
 	LOGI("* Setting up internal busybox");
-	exec_command_sync(MIRRDIR "/bin/busybox", "--install", "-s", BBPATH);
-	xsymlink(MIRRDIR "/bin/busybox", BBPATH "/busybox");
+	close(xopen(BBPATH "/busybox", O_RDONLY | O_CREAT | O_CLOEXEC));
+	bind_mount(DATABIN "/busybox", BBPATH "/busybox", false);
+	exec_command_sync(BBPATH "/busybox", "--install", "-s", BBPATH);
 
 	// Disable/remove magiskhide, resetprop, and modules
 	if (SDK_INT < 19) {
-		close(xopen(DISABLEFILE, O_RDONLY | O_CREAT, 0));
+		close(xopen(DISABLEFILE, O_RDONLY | O_CREAT | O_CLOEXEC, 0));
 		unlink("/sbin/resetprop");
 		unlink("/sbin/magiskhide");
 	}
 	return true;
 }
 
-static void upgrade_modules() {
+static void prepare_modules() {
 	const char *legacy_imgs[] = {SECURE_DIR "/magisk.img", SECURE_DIR "/magisk_merge.img"};
 	for (auto img : legacy_imgs) {
 		if (access(img, F_OK) == 0)
@@ -452,8 +456,8 @@ static void upgrade_modules() {
 		closedir(dir);
 		rm_rf(MODULEUPGRADE);
 	}
+	bind_mount(MIRRDIR MODULEROOT, MODULEMNT, false);
 	// Legacy support
-	bind_mount(MODULEROOT, MAGISKTMP "/img");
 	xmkdir(LEGACYCORE, 0755);
 	symlink(SECURE_DIR "/post-fs-data.d", LEGACYCORE "/post-fs-data.d");
 	symlink(SECURE_DIR "/service.d", LEGACYCORE "/service.d");
@@ -629,7 +633,7 @@ void post_fs_data(int client) {
 	LOGI("* Running post-fs-data.d scripts\n");
 	exec_common_script("post-fs-data");
 
-	upgrade_modules();
+	prepare_modules();
 
 	// Core only mode
 	if (access(DISABLEFILE, F_OK) == 0)
