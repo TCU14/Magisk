@@ -40,11 +40,12 @@ public class GeneralReceiver extends BroadcastReceiver {
         if (action == null)
             return;
         switch (action) {
+            case Intent.ACTION_REBOOT:
             case Intent.ACTION_BOOT_COMPLETED:
-                String bootAction = intent.getStringExtra("action");
-                if (bootAction == null)
-                    bootAction = "boot";
-                switch (bootAction) {
+                String realAction = intent.getStringExtra("action");
+                if (realAction == null)
+                    realAction = "boot_complete";
+                switch (realAction) {
                     case "request":
                         Intent i = new Intent(app, ClassMap.get(SuRequestActivity.class))
                                 .putExtra("socket", intent.getStringExtra("socket"))
@@ -57,7 +58,7 @@ public class GeneralReceiver extends BroadcastReceiver {
                     case "notify":
                         SU_LOGGER.handleNotify(intent);
                         break;
-                    case "boot":
+                    case "boot_complete":
                     default:
                         /* Devices with DTBO might want to patch dtbo.img.
                          * However, that is not possible if Magisk is installed by
