@@ -33,20 +33,7 @@ using namespace std;
 extern char *system_block, *vendor_block, *data_block;
 
 static int inotify_fd = -1;
-static set<int> hide_uid;
-
-// Workaround for the lack of pthread_cancel
-static void term_thread(int) {
-	LOGD("proc_monitor: running cleanup\n");
-	hide_list.clear();
-	hide_uid.clear();
-	hide_enabled = false;
-	pthread_mutex_destroy(&list_lock);
-	close(inotify_fd);
-	inotify_fd = -1;
-	LOGD("proc_monitor: terminating\n");
-	pthread_exit(nullptr);
-}
+static void term_thread(int sig = TERM_THREAD);
 
 static inline int read_ns(const int pid, struct stat *st) {
 	char path[32];
@@ -59,6 +46,7 @@ static inline void lazy_unmount(const char* mountpoint) {
 		LOGD("hide_daemon: Unmounted (%s)\n", mountpoint);
 }
 
+#if 0
 static inline int parse_ppid(const int pid) {
 	char path[32];
 	int ppid;
@@ -74,25 +62,7 @@ static inline int parse_ppid(const int pid) {
 
 	return ppid;
 }
-
-static bool is_snet(const int pid) {
-	char path[32];
-	char buf[64];
-	int fd;
-	ssize_t len;
-
-	sprintf(path, "/proc/%d/cmdline", pid);
-	fd = open(path, O_RDONLY | O_CLOEXEC);
-	if (fd == -1)
-		return false;
-
-	len = read(fd, buf, sizeof(buf));
-	close(fd);
-	if (len == -1)
-		return false;
-
-	return !strcmp(buf, SAFETYNET_PROCESS);
-}
+#endif
 
 static void hide_daemon(int pid) {
 	RunFinally fin([=]() -> void {
@@ -143,53 +113,65 @@ static void hide_daemon(int pid) {
 		lazy_unmount(s.data());
 }
 
-// A mapping from pid to namespace inode to avoid time-consuming GC
-static map<int, uint64_t> pid_ns_map;
+/********************
+ * All the damn maps
+ ********************/
 
-static bool process_pid(int pid) {
+map<string, string> hide_map;                       /* process -> package_name */
+static map<int, int> wd_uid_map;                    /* inotify wd -> uid */
+static map<int, uint64_t> pid_ns_map;               /* pid -> last ns inode */
+static map<int, vector<string_view>> uid_proc_map;  /* uid -> list of process */
+
+// All maps are protected by this lock
+pthread_mutex_t map_lock;
+
+static bool check_pid(int pid, int uid) {
 	// We're only interested in PIDs > 1000
 	if (pid <= 1000)
 		return true;
 
-	struct stat ns, pns;
-	int ppid;
-	int uid = get_uid(pid);
-	if (hide_uid.count(uid)) {
-		// Make sure we can read mount namespace
-		if ((ppid = parse_ppid(pid)) < 0 || read_ns(pid, &ns) || read_ns(ppid, &pns))
-			return true;
-		// mount namespace is not separated, we only unmount once
-		if (ns.st_dev == pns.st_dev && ns.st_ino == pns.st_ino)
-			return true;
+	// Not our target UID
+	if (uid != get_uid(pid))
+		return true;
 
-		// Check if it's a process we haven't already hijacked
-		auto pos = pid_ns_map.find(pid);
-		if (pos != pid_ns_map.end() && pos->second == ns.st_ino)
-			return true;
+	struct stat ns;
+	if (read_ns(pid, &ns))
+		return true;
 
-		if (uid == gms_uid) {
-			// Check /proc/uid/cmdline to see if it's SAFETYNET_PROCESS
-			if (!is_snet(pid))
-				return true;
+	// Check if we have already seen it before
+	auto pos = pid_ns_map.find(pid);
+	if (pos != pid_ns_map.end() && pos->second == ns.st_ino)
+		return true;
 
-			LOGD("proc_monitor: " SAFETYNET_PROCESS "\n");
-		}
+	// Will rather kill all just for one
+	if (kill(pid, SIGSTOP) == -1)
+		return true;
+	// Auto send resume signal if return
+	RunFinally resume([=]() -> void {
+		kill(pid, SIGCONT);
+	});
 
-		// Send pause signal ASAP
-		if (kill(pid, SIGSTOP) == -1)
-			return true;
+	// Record this PID
+	pid_ns_map[pid] = ns.st_ino;
 
-		pid_ns_map[pid] = ns.st_ino;
-		LOGI("proc_monitor: UID=[%d] PID=[%d] ns=[%llu]\n", uid, pid, ns.st_ino);
+	// Check whether process name match hide list
+	const char *process = nullptr;
+	for (auto &proc : uid_proc_map[uid])
+		if (proc_name_match(pid, proc.data()))
+			process = proc.data();
 
-		/*
-		 * The setns system call do not support multithread processes
-		 * We have to fork a new process, setns, then do the unmounts
-		 */
-		if (fork_dont_care() == 0)
-			hide_daemon(pid);
-	}
-	return true;
+	if (!process)
+		return true;
+
+	LOGI("proc_monitor: [%s] UID=[%d] PID=[%d] ns=[%llu]\n", process, uid, pid, ns.st_ino);
+
+	// Disable auto resume PID, and let the daemon do it
+	resume.disable();
+	if (fork_dont_care() == 0)
+		hide_daemon(pid);
+
+	// We found what we want, stop traversal
+	return false;
 }
 
 static int xinotify_add_watch(int fd, const char* path, uint32_t mask) {
@@ -202,29 +184,37 @@ static int xinotify_add_watch(int fd, const char* path, uint32_t mask) {
 	return ret;
 }
 
-static int new_inotify;
-static const string_view APK_EXT(".apk");
-static vector<string> hide_apks;
-
 static bool parse_packages_xml(string_view &s) {
+	static const string_view APK_EXT(".apk");
 	if (!str_starts(s, "<package "))
 		return true;
 	/* <package key1="value1" key2="value2"....> */
 	char *start = (char *) s.data();
 	start[s.length() - 2] = '\0';  /* Remove trailing '>' */
-	char key[32], value[1024];
-	char *tok;
 	start += 9;  /* Skip '<package ' */
+
+	char key[32], value[1024];
+	char *pkg = nullptr;
+	int wd = -1;
+
+	char *tok;
 	while ((tok = strtok_r(nullptr, " ", &start))) {
 		sscanf(tok, "%[^=]=\"%[^\"]", key, value);
+		string_view key_view(key);
 		string_view value_view(value);
-		if (strcmp(key, "name") == 0) {
-			if (std::count(hide_list.begin(), hide_list.end(), value_view) == 0)
+		if (key_view == "name") {
+			for (auto &hide : hide_map) {
+				if (hide.second == value_view) {
+					pkg = hide.second.data();
+					break;
+				}
+			}
+			if (!pkg)
 				return true;
-		} else if (strcmp(key, "codePath") == 0) {
+		} else if (key_view == "codePath") {
 			if (ends_with(value_view, APK_EXT)) {
 				// Directly add to inotify list
-				hide_apks.emplace_back(value);
+				wd = xinotify_add_watch(inotify_fd, value, IN_OPEN);
 			} else {
 				DIR *dir = opendir(value);
 				if (dir == nullptr)
@@ -232,36 +222,30 @@ static bool parse_packages_xml(string_view &s) {
 				struct dirent *entry;
 				while ((entry = xreaddir(dir))) {
 					if (ends_with(entry->d_name, APK_EXT)) {
-						strcpy(value + value_view.length(), "/");
+						value[value_view.length()] = '/';
 						strcpy(value + value_view.length() + 1, entry->d_name);
-						hide_apks.emplace_back(value);
+						wd = xinotify_add_watch(inotify_fd, value, IN_OPEN);
 						break;
 					}
 				}
 				closedir(dir);
 			}
-		} else if (strcmp(key, "userId") == 0 || strcmp(key, "sharedUserId") == 0) {
-			hide_uid.insert(parse_int(value));
+		} else if (key_view == "userId" || key_view == "sharedUserId") {
+			int uid = parse_int(value);
+			wd_uid_map[wd] = uid;
+			for (auto &hide : hide_map) {
+				if (hide.second == pkg)
+					uid_proc_map[uid].emplace_back(hide.first);
+			}
 		}
 	}
 	return true;
 }
 
 void update_inotify_mask() {
-	new_inotify = inotify_init();
-	if (new_inotify < 0) {
-		LOGE("proc_monitor: Cannot initialize inotify: %s\n", strerror(errno));
-		term_thread(TERM_THREAD);
-	}
-	fcntl(new_inotify, F_SETFD, FD_CLOEXEC);
-
-	LOGD("proc_monitor: Updating inotify list\n");
-	hide_apks.clear();
-	{
-		MutexGuard lock(list_lock);
-		hide_uid.clear();
-		file_readline("/data/system/packages.xml", parse_packages_xml, true);
-	}
+	int new_inotify = xinotify_init1(IN_CLOEXEC);
+	if (new_inotify < 0)
+		term_thread();
 
 	// Swap out and close old inotify_fd
 	int tmp = inotify_fd;
@@ -269,9 +253,29 @@ void update_inotify_mask() {
 	if (tmp >= 0)
 		close(tmp);
 
-	for (auto apk : hide_apks)
-		xinotify_add_watch(inotify_fd, apk.data(), IN_OPEN);
+	LOGD("proc_monitor: Updating inotify list\n");
+	{
+		MutexGuard lock(map_lock);
+		uid_proc_map.clear();
+		wd_uid_map.clear();
+		file_readline("/data/system/packages.xml", parse_packages_xml, true);
+	}
 	xinotify_add_watch(inotify_fd, "/data/system", IN_CLOSE_WRITE);
+}
+
+// Workaround for the lack of pthread_cancel
+static void term_thread(int) {
+	LOGD("proc_monitor: cleaning up\n");
+	hide_map.clear();
+	uid_proc_map.clear();
+	pid_ns_map.clear();
+	wd_uid_map.clear();
+	hide_enabled = false;
+	pthread_mutex_destroy(&map_lock);
+	close(inotify_fd);
+	inotify_fd = -1;
+	LOGD("proc_monitor: terminate\n");
+	pthread_exit(nullptr);
 }
 
 void proc_monitor() {
@@ -288,20 +292,21 @@ void proc_monitor() {
 
 	// Read inotify events
 	ssize_t len;
+	int uid;
 	char buf[512];
 	auto event = reinterpret_cast<inotify_event *>(buf);
 	while ((len = read(inotify_fd, buf, sizeof(buf))) >= 0) {
 		if (len < sizeof(*event))
 			continue;
 		if (event->mask & IN_OPEN) {
-			// Since we're just watching files,
-			// extracting file name is not possible from querying event
-			MutexGuard lock(list_lock);
-			crawl_procfs(process_pid);
+			MutexGuard lock(map_lock);
+			uid = wd_uid_map[event->wd];
+			crawl_procfs([=](int pid) -> bool { return check_pid(pid, uid); });
 		} else if ((event->mask & IN_CLOSE_WRITE) && strcmp(event->name, "packages.xml") == 0) {
 			LOGD("proc_monitor: /data/system/packages.xml updated\n");
 			update_inotify_mask();
 		}
 	}
 	PLOGE("proc_monitor: read inotify");
+	term_thread();
 }

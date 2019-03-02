@@ -71,6 +71,7 @@ void *xmmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset
 ssize_t xsendfile(int out_fd, int in_fd, off_t *offset, size_t count);
 pid_t xfork();
 int xpoll(struct pollfd *fds, nfds_t nfds, int timeout);
+int xinotify_init1(int flags);
 
 // misc.cpp
 
@@ -161,10 +162,12 @@ class RunFinally {
 public:
 	explicit RunFinally(std::function<void()> &&fn): fn(std::move(fn)) {}
 
-	~RunFinally() { fn(); }
+	void disable() { fn = nullptr; }
+
+	~RunFinally() { if (fn) fn(); }
 
 private:
-	const std::function<void ()> fn;
+	std::function<void ()> fn;
 };
 
 // file.cpp
