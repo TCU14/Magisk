@@ -256,6 +256,7 @@ static bool verify_precompiled() {
 	return memcmp(sys_sha, ven_sha, sizeof(sys_sha)) == 0;
 }
 
+constexpr char SYSTEM_INIT[] = "/system/bin/init";
 static bool patch_sepolicy() {
 	bool init_patch = false;
 	if (access(SPLIT_PRECOMPILE, R_OK) == 0 && verify_precompiled()) {
@@ -281,14 +282,24 @@ static bool patch_sepolicy() {
 	}
 
 	if (init_patch) {
-		// Force init to load /sepolicy
-		uint8_t *addr;
+		// If init is symlink, copy it to rootfs so we can patch
+		struct stat st;
+		lstat("/init", &st);
+		if (S_ISLNK(st.st_mode))
+			cp_afc(SYSTEM_INIT, "/init");
+
+		char *addr;
 		size_t size;
 		mmap_rw("/init", addr, size);
-		for (int i = 0; i < size; ++i) {
-			if (memcmp(addr + i, SPLIT_PLAT_CIL, sizeof(SPLIT_PLAT_CIL) - 1) == 0) {
-				memcpy(addr + i + sizeof(SPLIT_PLAT_CIL) - 4, "xxx", 3);
-				break;
+		for (char *p = addr; p < addr + size; ++p) {
+			if (memcmp(p, SPLIT_PLAT_CIL, sizeof(SPLIT_PLAT_CIL)) == 0) {
+				// Force init to load /sepolicy
+				memset(p, 'x', sizeof(SPLIT_PLAT_CIL) - 1);
+				p += sizeof(SPLIT_PLAT_CIL) - 1;
+			} else if (memcmp(p, SYSTEM_INIT, sizeof(SYSTEM_INIT)) == 0) {
+				// Force execute /init instead of /system/bin/init
+				strcpy(p, "/init");
+				p += sizeof(SYSTEM_INIT) - 1;
 			}
 		}
 		munmap(addr, size);
