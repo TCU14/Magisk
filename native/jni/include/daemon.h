@@ -21,6 +21,7 @@ enum {
 	BOOT_COMPLETE,
 	MAGISKHIDE,
 	SQLITE_CMD,
+	ZYGOTE_NOTIFY,
 };
 
 // Return codes for daemon
@@ -33,7 +34,7 @@ enum {
 
 // daemon.c
 
-int connect_daemon();
+int connect_daemon(bool create = false);
 int switch_mnt_ns(int pid);
 
 // socket.c
@@ -78,6 +79,8 @@ void install_apk(const char *apk);
  **************/
 
 void magiskhide_handler(int client);
+void zygote_notify(int client, struct ucred *cred);
+void zygote_notify(int pid);
 
 /*************
  * Superuser *
