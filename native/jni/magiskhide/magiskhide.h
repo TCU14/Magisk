@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <set>
 
 #include "daemon.h"
 
@@ -17,6 +18,7 @@
 #define SAFETYNET_COMPONENT  "com.google.android.gms/.droidguard.DroidGuardService"
 #define SAFETYNET_PROCESS    "com.google.android.gms.unstable"
 #define SAFETYNET_PKG        "com.google.android.gms"
+#define MICROG_SAFETYNET     "org.microg.gms.droidguard"
 
 #define WEVENT(s) (((s) & 0xffff0000) >> 16)
 
@@ -54,7 +56,7 @@ static inline int parse_int(const char *s) {
 
 extern bool hide_enabled;
 extern pthread_mutex_t monitor_lock;
-extern std::map<std::string, std::string> hide_map;
+extern std::set<std::pair<std::string, std::string>> hide_set;
 extern int next_zygote;
 
 enum {
