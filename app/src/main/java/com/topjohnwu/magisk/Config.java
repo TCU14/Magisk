@@ -75,7 +75,7 @@ public class Config {
         public static final int CUSTOM_CHANNEL = 2;
         public static final int CANARY_CHANNEL = 3;
         public static final int CANARY_DEBUG_CHANNEL = 4;
-	public static final int IANMACD_CHANNEL = 5;
+	public static final int IANMACD_CHANNEL = 99;
         public static final int ROOT_ACCESS_DISABLED = 0;
         public static final int ROOT_ACCESS_APPS_ONLY = 1;
         public static final int ROOT_ACCESS_ADB_ONLY = 2;
