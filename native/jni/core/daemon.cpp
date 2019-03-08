@@ -89,9 +89,6 @@ static void *request_handler(void *args) {
 	case SQLITE_CMD:
 		exec_sql(client);
 		break;
-	case ZYGOTE_NOTIFY:
-		zygote_notify(client, &credential);
-		break;
 	default:
 		close(client);
 		break;
@@ -120,7 +117,7 @@ static void main_daemon() {
 	parse_prop_file("/system/build.prop", [](auto key, auto val) -> bool {
 		if (key == "ro.build.version.sdk") {
 			LOGI("* Device API level: %s\n", val.data());
-			SDK_INT = atoi(val.data());
+			SDK_INT = parse_int(val);
 			return false;
 		}
 		return true;
