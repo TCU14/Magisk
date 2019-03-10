@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/mount.h>
+#include <vector>
 
 #include <magisk.h>
 #include <utils.h>
@@ -34,9 +35,9 @@ static int inotify_fd = -1;
 static void term_thread(int sig = SIGTERMTHRD);
 static void new_zygote(int pid);
 
-/************************
- * All the maps and sets
- ************************/
+/**********************
+ * All data structures
+ **********************/
 
 set<pair<string, string>> hide_set;                 /* set of <pkg, process> pair */
 static map<int, struct stat> zygote_map;            /* zygote pid -> mnt ns */
@@ -44,9 +45,10 @@ static map<int, vector<string_view>> uid_proc_map;  /* uid -> list of process */
 
 pthread_mutex_t monitor_lock;
 
-static set<int> attaches;   /* A set of pid that should be attached */
-static set<int> detaches;   /* A set of tid that should be detached */
-static set<int> unknown;    /* A set of pid/tid that is unknown */
+#define PID_MAX 32768
+static vector<bool> attaches(PID_MAX);  /* true if pid should be monitored */
+static vector<bool> detaches(PID_MAX);  /* true if tid should be detached */
+static vector<bool> unknowns(PID_MAX);  /* true if pid/tid is in unknown state */
 
 /********
  * Utils
@@ -240,14 +242,12 @@ static void inotify_event(int) {
 // Workaround for the lack of pthread_cancel
 static void term_thread(int) {
 	LOGD("proc_monitor: cleaning up\n");
-	// Clear maps
 	uid_proc_map.clear();
 	zygote_map.clear();
-	// Clear sets
 	hide_set.clear();
-	attaches.clear();
-	detaches.clear();
-	unknown.clear();
+	std::fill(attaches.begin(), attaches.end(), false);
+	std::fill(detaches.begin(), detaches.end(), false);
+	std::fill(unknowns.begin(), unknowns.end(), false);
 	// Misc
 	hide_enabled = false;
 	pthread_mutex_destroy(&monitor_lock);
@@ -282,7 +282,7 @@ static bool check_pid(int pid) {
 
 	/* This process is fully initialized, we will stop
 	 * tracing it no matter if it is a target or not. */
-	attaches.erase(pid);
+	attaches[pid] = false;
 
 	sprintf(path, "/proc/%d", pid);
 	struct stat st;
@@ -323,13 +323,6 @@ static bool check_pid(int pid) {
 	return true;
 }
 
-static void handle_unknown(int tid, int pid = -1) {
-	if (unknown.count(tid)) {
-		unknown.erase(tid);
-		tgkill(pid < 0 ? tid : pid, tid, SIGSTOP);
-	}
-}
-
 static void new_zygote(int pid) {
 	if (zygote_map.count(pid))
 		return;
@@ -349,6 +342,7 @@ static void new_zygote(int pid) {
 	xptrace(PTRACE_CONT, pid);
 }
 
+#define DETACH_AND_CONT { detach = true; continue; }
 void proc_monitor() {
 	inotify_fd = xinotify_init1(IN_CLOEXEC);
 	if (inotify_fd < 0)
@@ -384,15 +378,23 @@ void proc_monitor() {
 	int status;
 
 	for (;;) {
-		int pid = waitpid(-1, &status, __WALL | __WNOTHREAD);
+		const int pid = waitpid(-1, &status, __WALL | __WNOTHREAD);
 		if (pid < 0)
 			continue;
+		bool detach = false;
+		RunFinally detach_task([&]() -> void {
+			if (detach) {
+				// Non of our business now
+				attaches[pid] = false;
+				detaches[pid] = false;
+				unknowns[pid] = false;
+				ptrace(PTRACE_DETACH, pid, 0, 0);
+			}
+		});
 		if (WIFSTOPPED(status)) {
-			if (detaches.count(pid)) {
+			if (detaches[pid]) {
 				PTRACE_LOG("detach\n");
-				detaches.erase(pid);
-				xptrace(PTRACE_DETACH, pid);
-				continue;
+				DETACH_AND_CONT;
 			}
 			if (WSTOPSIG(status) == SIGTRAP && WEVENT(status)) {
 				unsigned long msg;
@@ -403,13 +405,18 @@ void proc_monitor() {
 						case PTRACE_EVENT_FORK:
 						case PTRACE_EVENT_VFORK:
 							PTRACE_LOG("zygote forked: [%d]\n", msg);
-							attaches.insert(msg);
-							handle_unknown(msg);
+							attaches[msg] = true;
+							if (unknowns[msg]) {
+								/* Stop the child again to make sure
+								 * we are monitoring the proper events */
+								unknowns[msg] = false;
+								tgkill(msg, msg, SIGSTOP);
+							}
 							break;
 						case PTRACE_EVENT_EXIT:
 							PTRACE_LOG("zygote exited with status: [%d]\n", msg);
 							zygote_map.erase(pid);
-							break;
+							DETACH_AND_CONT;
 						default:
 							PTRACE_LOG("unknown event: %d\n", WEVENT(status));
 							break;
@@ -419,16 +426,14 @@ void proc_monitor() {
 					switch (WEVENT(status)) {
 						case PTRACE_EVENT_CLONE:
 							PTRACE_LOG("create new threads: [%d]\n", msg);
-							detaches.insert(msg);
-							handle_unknown(msg, pid);
-							if (attaches.count(pid) && check_pid(pid))
+							detaches[msg] = true;
+							if (attaches[pid] && check_pid(pid))
 								continue;
 							break;
+						case PTRACE_EVENT_EXEC:
 						case PTRACE_EVENT_EXIT:
-							PTRACE_LOG("exited with status: [%d]\n", msg);
-							attaches.erase(pid);
-							unknown.erase(pid);
-							break;
+							PTRACE_LOG("exited or execve\n");
+							DETACH_AND_CONT;
 						default:
 							PTRACE_LOG("unknown event: %d\n", WEVENT(status));
 							break;
@@ -436,12 +441,13 @@ void proc_monitor() {
 					xptrace(PTRACE_CONT, pid);
 				}
 			} else if (WSTOPSIG(status) == SIGSTOP) {
-				if (attaches.count(pid)) {
+				if (attaches[pid]) {
 					PTRACE_LOG("SIGSTOP from zygote child\n");
-					xptrace(PTRACE_SETOPTIONS, pid, nullptr, PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXIT);
+					xptrace(PTRACE_SETOPTIONS, pid, nullptr,
+							PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC | PTRACE_O_TRACEEXIT);
 				} else {
 					PTRACE_LOG("SIGSTOP from unknown\n");
-					unknown.insert(pid);
+					unknowns[pid] = true;
 				}
 				xptrace(PTRACE_CONT, pid);
 			} else {
@@ -451,8 +457,8 @@ void proc_monitor() {
 			}
 		} else {
 			// Nothing to do with us
-			ptrace(PTRACE_DETACH, pid);
 			PTRACE_LOG("terminate\n");
+			DETACH_AND_CONT;
 		}
 	}
 }
