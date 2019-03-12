@@ -8,11 +8,11 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.Build;
 import android.provider.OpenableColumns;
 import android.widget.Toast;
 
 import com.topjohnwu.magisk.App;
+import com.topjohnwu.magisk.BuildConfig;
 import com.topjohnwu.magisk.Config;
 import com.topjohnwu.magisk.Const;
 import com.topjohnwu.magisk.container.Module;
@@ -116,12 +116,11 @@ public class Utils {
                         Config.Value.MULTIUSER_MODE_OWNER_MANAGED);
     }
 
-    public static Context getDEContext() {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ?
-                App.self.createDeviceProtectedStorageContext() : App.self;
-    }
-
     public static void reboot() {
         Shell.su("/system/bin/reboot" + (Config.recovery ? " recovery" : "")).submit();
+    }
+
+    public static boolean isCanary() {
+        return BuildConfig.VERSION_NAME.contains("-");
     }
 }
