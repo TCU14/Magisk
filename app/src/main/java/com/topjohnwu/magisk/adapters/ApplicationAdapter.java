@@ -23,6 +23,8 @@ import com.buildware.widget.indeterm.IndeterminateCheckBox;
 import com.topjohnwu.magisk.App;
 import com.topjohnwu.magisk.Config;
 import com.topjohnwu.magisk.R;
+import com.topjohnwu.magisk.uicomponents.ArrowExpandable;
+import com.topjohnwu.magisk.uicomponents.Expandable;
 import com.topjohnwu.magisk.utils.Topic;
 import com.topjohnwu.magisk.utils.Utils;
 import com.topjohnwu.superuser.Shell;
@@ -58,6 +60,8 @@ public class ApplicationAdapter extends SectionedAdapter
     private static final String SAFETYNET_PROCESS = "com.google.android.gms.unstable";
     private static final String GMS_PACKAGE = "com.google.android.gms";
 
+    private static int BOTTOM_MARGIN = -1;
+
     private List<HideAppInfo> fullList, showList;
     private List<HideTarget> hideList;
     private PackageManager pm;
@@ -71,6 +75,10 @@ public class ApplicationAdapter extends SectionedAdapter
         AsyncTask.SERIAL_EXECUTOR.execute(this::loadApps);
     }
 
+    private static ViewGroup.MarginLayoutParams getMargins(RecyclerView.ViewHolder vh) {
+        return (ViewGroup.MarginLayoutParams) vh.itemView.getLayoutParams();
+    }
+
     @Override
     public int getSectionCount() {
         return showList.size();
@@ -78,13 +86,17 @@ public class ApplicationAdapter extends SectionedAdapter
 
     @Override
     public int getItemCount(int section) {
-        return showList.get(section).expanded ? showList.get(section).processes.size() : 0;
+        HideAppInfo app = showList.get(section);
+        return app.expanded ? app.processList.size() : 0;
     }
 
     @Override
     public AppViewHolder onCreateSectionViewHolder(ViewGroup parent) {
         View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.list_item_hide_app, parent, false);
-        return new AppViewHolder(v);
+        AppViewHolder vh = new AppViewHolder(v);
+        if (BOTTOM_MARGIN < 0)
+            BOTTOM_MARGIN = getMargins(vh).bottomMargin;
+        return vh;
     }
 
     @Override
@@ -96,45 +108,34 @@ public class ApplicationAdapter extends SectionedAdapter
     @Override
     public void onBindSectionViewHolder(AppViewHolder holder, int section) {
         HideAppInfo app = showList.get(section);
-        IndeterminateCheckBox.OnStateChangedListener listener =
-                (IndeterminateCheckBox indeterminateCheckBox, @Nullable Boolean stat) -> {
-                    if (stat != null) {
-                        for (HideProcessInfo p : app.processes) {
-                            String cmd = Utils.fmt("magiskhide --%s %s %s",
-                                    stat ? "add" : "rm", app.info.packageName, p.name);
-                            Shell.su(cmd).submit();
-                            p.hidden = stat;
-                        }
-                    }
-                };
         holder.app_name.setText(app.name);
         holder.app_icon.setImageDrawable(app.info.loadIcon(pm));
         holder.package_name.setText(app.info.packageName);
         holder.checkBox.setOnStateChangedListener(null);
-        holder.checkBox.setOnStateChangedListener(listener);
         holder.checkBox.setState(app.getState());
-        if (app.expanded) {
-            holder.checkBox.setVisibility(View.GONE);
-            setBottomMargin(holder.itemView, 0);
-        } else {
-            holder.checkBox.setVisibility(View.VISIBLE);
-            setBottomMargin(holder.itemView, 2);
-        }
-        holder.itemView.setOnClickListener((v) -> {
-            int index = getItemPosition(section, 0);
+        holder.ex.setExpanded(app.expanded);
+
+        int index = getItemPosition(section, 0);
+        holder.checkBox.setOnStateChangedListener((IndeterminateCheckBox box, @Nullable Boolean status) -> {
+            if (status != null) {
+                for (HideProcessInfo p : app.processList) {
+                    String cmd = Utils.fmt("magiskhide --%s %s %s",
+                            status ? "add" : "rm", app.info.packageName, p.name);
+                    Shell.su(cmd).submit();
+                    p.hidden = status;
+                }
+                notifyItemRangeChanged(index, app.processList.size());
+            }
+        });
+        holder.trigger.setOnClickListener((v) -> {
             if (app.expanded) {
                 app.expanded = false;
-                notifyItemRangeRemoved(index, app.processes.size());
-                setBottomMargin(holder.itemView, 2);
-                holder.checkBox.setOnStateChangedListener(null);
-                holder.checkBox.setVisibility(View.VISIBLE);
-                holder.checkBox.setState(app.getState());
-                holder.checkBox.setOnStateChangedListener(listener);
+                notifyItemRangeRemoved(index, app.processList.size());
+                holder.ex.collapse();
             } else {
-                holder.checkBox.setVisibility(View.GONE);
-                setBottomMargin(holder.itemView, 0);
                 app.expanded = true;
-                notifyItemRangeInserted(index, app.processes.size());
+                notifyItemRangeInserted(index, app.processList.size());
+                holder.ex.expand();
             }
         });
     }
@@ -142,21 +143,18 @@ public class ApplicationAdapter extends SectionedAdapter
     @Override
     public void onBindItemViewHolder(ProcessViewHolder holder, int section, int position) {
         HideAppInfo hideApp = showList.get(section);
-        HideProcessInfo target = hideApp.processes.get(position);
+        HideProcessInfo target = hideApp.processList.get(position);
         holder.process.setText(target.name);
         holder.checkbox.setOnCheckedChangeListener(null);
         holder.checkbox.setChecked(target.hidden);
-        holder.checkbox.setOnCheckedChangeListener((v, isChecked) -> {
-            String pair = Utils.fmt("%s %s", hideApp.info.packageName, target.name);
-            if (isChecked) {
-                Shell.su("magiskhide --add " + pair).submit();
-                target.hidden = true;
-            } else {
-                Shell.su("magiskhide --rm " + pair).submit();
-                target.hidden = false;
-            }
-
+        holder.checkbox.setOnCheckedChangeListener((v, checked) -> {
+            Shell.su(Utils.fmt("magiskhide --%s %s %s", checked ? "add" : "rm",
+                    hideApp.info.packageName, target.name)).submit();
+            target.hidden = checked;
+            notifyItemChanged(getSectionPosition(section));
         });
+        getMargins(holder).bottomMargin =
+                position == hideApp.processList.size() - 1 ? BOTTOM_MARGIN : 0;
     }
 
     public void filter(String constraint) {
@@ -177,18 +175,6 @@ public class ApplicationAdapter extends SectionedAdapter
 
     public void refresh() {
         AsyncTask.SERIAL_EXECUTOR.execute(this::loadApps);
-    }
-
-    private void setBottomMargin(View view, int dp) {
-        ViewGroup.LayoutParams params = view.getLayoutParams();
-        ViewGroup.MarginLayoutParams marginParams;
-        if (params instanceof ViewGroup.MarginLayoutParams) {
-            marginParams = (ViewGroup.MarginLayoutParams) params;
-        } else {
-            marginParams = new ViewGroup.MarginLayoutParams(params);
-        }
-        marginParams.bottomMargin = Utils.dpInPx(dp);
-        view.setLayoutParams(marginParams);
     }
 
     private void addProcesses(Set<String> set, ComponentInfo[] infos) {
@@ -258,7 +244,7 @@ public class ApplicationAdapter extends SectionedAdapter
         filter = filter.toLowerCase();
         if (contains(target.name, filter))
             return true;
-        for (HideProcessInfo p : target.processes) {
+        for (HideProcessInfo p : target.processList) {
             if (contains(p.name, filter))
                 return true;
         }
@@ -268,16 +254,27 @@ public class ApplicationAdapter extends SectionedAdapter
     class HideAppInfo implements Comparable<HideAppInfo> {
         String name;
         ApplicationInfo info;
-        List<HideProcessInfo> processes;
+        List<HideProcessInfo> processList;
         boolean expanded;
+        IndeterminateCheckBox.OnStateChangedListener listener;
 
         HideAppInfo(ApplicationInfo appInfo, Set<String> set) {
             info = appInfo;
             name = Utils.getAppLabel(info, pm);
             expanded = false;
-            processes = StreamSupport.stream(set)
+            processList = StreamSupport.stream(set)
                     .map(process -> new HideProcessInfo(info.packageName, process))
                     .sorted().collect(Collectors.toList());
+            listener = (IndeterminateCheckBox box, @Nullable Boolean status) -> {
+                if (status != null) {
+                    for (HideProcessInfo p : processList) {
+                        String cmd = Utils.fmt("magiskhide --%s %s %s",
+                                status ? "add" : "rm", info.packageName, p.name);
+                        Shell.su(cmd).submit();
+                        p.hidden = status;
+                    }
+                }
+            };
         }
 
         @Override
@@ -293,7 +290,7 @@ public class ApplicationAdapter extends SectionedAdapter
         Boolean getState() {
             boolean all = true;
             boolean hidden = false;
-            for (HideProcessInfo p : processes) {
+            for (HideProcessInfo p : processList) {
                 if (!p.hidden)
                     all = false;
                 else
@@ -356,10 +353,25 @@ public class ApplicationAdapter extends SectionedAdapter
         @BindView(R.id.app_name) TextView app_name;
         @BindView(R.id.package_name) TextView package_name;
         @BindView(R.id.checkbox) IndeterminateCheckBox checkBox;
+        @BindView(R.id.trigger) View trigger;
+        @BindView(R.id.arrow) ImageView arrow;
 
-        public AppViewHolder(@NonNull View itemView) {
+        Expandable ex;
+
+        AppViewHolder(@NonNull View itemView) {
             super(itemView);
             new ApplicationAdapter$AppViewHolder_ViewBinding(this, itemView);
+            ex = new ArrowExpandable(new Expandable() {
+                @Override
+                protected void onExpand() {
+                    getMargins(AppViewHolder.this).bottomMargin = 0;
+                }
+
+                @Override
+                protected void onCollapse() {
+                    getMargins(AppViewHolder.this).bottomMargin = BOTTOM_MARGIN;
+                }
+            }, arrow);
         }
     }
 
@@ -368,7 +380,7 @@ public class ApplicationAdapter extends SectionedAdapter
         @BindView(R.id.process) TextView process;
         @BindView(R.id.checkbox) CheckBox checkbox;
 
-        public ProcessViewHolder(@NonNull View itemView) {
+        ProcessViewHolder(@NonNull View itemView) {
             super(itemView);
             new ApplicationAdapter$ProcessViewHolder_ViewBinding(this, itemView);
         }
