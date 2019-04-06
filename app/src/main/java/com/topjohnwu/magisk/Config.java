@@ -73,6 +73,7 @@ public class Config {
     }
 
     public static class Value {
+        public static final int DEFAULT_CHANNEL = -1;
         public static final int STABLE_CHANNEL = 0;
         public static final int BETA_CHANNEL = 1;
         public static final int CUSTOM_CHANNEL = 2;
