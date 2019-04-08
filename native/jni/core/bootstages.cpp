@@ -31,8 +31,6 @@ static vector<string> module_list;
 static bool seperate_vendor;
 static bool no_secure_dir = false;
 
-char *system_block, *vendor_block, *data_block;
-
 static int bind_mount(const char *from, const char *to, bool log = true);
 extern void auto_start_magiskhide();
 
@@ -303,6 +301,18 @@ static int bind_mount(const char *from, const char *to, bool log) {
 	return ret;
 }
 
+#define MIRRMNT(part)   MIRRDIR "/" #part
+#define PARTBLK(part)   BLOCKDIR "/" #part
+
+#define mount_mirror(part, flag) { \
+	sscanf(line.data(), "%s %*s %s", buf, buf2); \
+	xstat(buf, &st); \
+	mknod(PARTBLK(part), S_IFBLK | 0600, st.st_rdev); \
+	xmkdir(MIRRMNT(part), 0755); \
+	xmount(PARTBLK(part), MIRRMNT(part), buf2, flag, nullptr); \
+	VLOGI("mount", PARTBLK(part), MIRRMNT(part)); \
+}
+
 static bool magisk_env() {
 	LOGI("* Initializing Magisk environment\n");
 
@@ -336,8 +346,8 @@ static bool magisk_env() {
 	symlink(MODULEMNT, MAGISKTMP "/img");
 
 	// Directories in tmpfs overlay
-	xmkdirs(MIRRDIR "/system", 0755);
-	xmkdir(MIRRDIR "/data", 0755);
+	xmkdir(MIRRDIR, 0);
+	xmkdir(BLOCKDIR, 0);
 	xmkdir(BBPATH, 0755);
 	xmkdir(MODULEMNT, 0755);
 
@@ -349,29 +359,19 @@ static bool magisk_env() {
 
 	LOGI("* Mounting mirrors");
 	bool system_as_root = false;
+	struct stat st;
 	file_readline("/proc/mounts", [&](string_view line) -> bool {
 		if (str_contains(line, " /system_root ")) {
-			bind_mount("/system_root/system", MIRRDIR "/system");
-			sscanf(line.data(), "%s", buf);
-			system_block = strdup(buf);
+			mount_mirror(system_root, MS_RDONLY);
+			xsymlink(MIRRMNT(system_root) "/system", MIRRMNT(system));
 			system_as_root = true;
 		} else if (!system_as_root && str_contains(line, " /system ")) {
-			sscanf(line.data(), "%s %*s %s", buf, buf2);
-			system_block = strdup(buf);
-			xmount(system_block, MIRRDIR "/system", buf2, MS_RDONLY, nullptr);
-			VLOGI("mount", system_block, MIRRDIR "/system");
+			mount_mirror(system, MS_RDONLY);
 		} else if (str_contains(line, " /vendor ")) {
+			mount_mirror(vendor, MS_RDONLY);
 			seperate_vendor = true;
-			sscanf(line.data(), "%s %*s %s", buf, buf2);
-			vendor_block = strdup(buf);
-			xmkdir(MIRRDIR "/vendor", 0755);
-			xmount(vendor_block, MIRRDIR "/vendor", buf2, MS_RDONLY, nullptr);
-			VLOGI("mount", vendor_block, MIRRDIR "/vendor");
 		} else if (str_contains(line, " /data ")) {
-			sscanf(line.data(), "%s %*s %s", buf, buf2);
-			data_block = strdup(buf);
-			xmount(data_block, MIRRDIR "/data", buf2, 0, nullptr);
-			VLOGI("mount", data_block, MIRRDIR "/data");
+			mount_mirror(data, 0);
 		} else if (SDK_INT >= 24 &&
 		str_contains(line, " /proc ") && !str_contains(line, "hidepid=2")) {
 			// Enforce hidepid
