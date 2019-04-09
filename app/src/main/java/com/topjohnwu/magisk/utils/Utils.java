@@ -27,7 +27,6 @@ import com.topjohnwu.magisk.R;
 import com.topjohnwu.magisk.components.UpdateCheckService;
 import com.topjohnwu.magisk.container.Module;
 import com.topjohnwu.magisk.container.ValueSortedMap;
-import com.topjohnwu.magisk.tasks.CheckUpdates;
 import com.topjohnwu.net.Networking;
 import com.topjohnwu.superuser.Shell;
 import com.topjohnwu.superuser.internal.UiThreadHandler;
@@ -136,10 +135,6 @@ public class Utils {
                         Config.Value.MULTIUSER_MODE_OWNER_MANAGED);
     }
 
-    public static void reboot() {
-        Shell.su("/system/bin/reboot" + (Config.recovery ? " recovery" : "")).submit();
-    }
-
     public static boolean isCanary() {
         return BuildConfig.VERSION_NAME.contains("-");
     }
@@ -158,7 +153,6 @@ public class Utils {
                     ExistingPeriodicWorkPolicy.REPLACE, request);
         } else {
             WorkManager.getInstance().cancelUniqueWork(Const.ID.CHECK_MAGISK_UPDATE_WORKER_ID);
-            CheckUpdates.check();
         }
     }
 
