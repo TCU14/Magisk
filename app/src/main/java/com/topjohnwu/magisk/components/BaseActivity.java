@@ -4,7 +4,9 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.WindowManager;
@@ -14,7 +16,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StyleRes;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.app.AppCompatDelegate;
 import androidx.collection.SparseArrayCompat;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -28,17 +29,12 @@ import com.topjohnwu.magisk.utils.LocaleManager;
 
 public abstract class BaseActivity extends AppCompatActivity implements Event.AutoListener {
 
-    public static final String INTENT_PERM = "perm_dialog";
     private static Runnable grantCallback;
 
     static int[] EMPTY_INT_ARRAY = new int[0];
 
     private SparseArrayCompat<ActivityResultListener> resultListeners = new SparseArrayCompat<>();
     public App app = App.self;
-
-    static {
-        AppCompatDelegate.setCompatVectorFromResourcesEnabled(true);
-    }
 
     @Override
     public int[] getListeningEvents() {
@@ -65,9 +61,6 @@ public abstract class BaseActivity extends AppCompatActivity implements Event.Au
             setTheme(getDarkTheme());
         }
         super.onCreate(savedInstanceState);
-        String[] perms = getIntent().getStringArrayExtra(INTENT_PERM);
-        if (perms != null)
-            ActivityCompat.requestPermissions(this, perms, 0);
     }
 
     @Override
@@ -88,6 +81,13 @@ public abstract class BaseActivity extends AppCompatActivity implements Event.Au
             getWindow().setAttributes(params);
             setFinishOnTouchOutside(true);
         }
+    }
+
+    protected void lockOrientation() {
+        if (Build.VERSION.SDK_INT < 18)
+            setRequestedOrientation(getResources().getConfiguration().orientation);
+        else
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED);
     }
 
     public void runWithExternalRW(Runnable callback) {
