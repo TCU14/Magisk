@@ -14,9 +14,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatDelegate;
 
-import com.topjohnwu.magisk.components.BaseActivity;
-import com.topjohnwu.magisk.database.MagiskDB;
-import com.topjohnwu.magisk.database.RepoDatabaseHelper;
+import com.topjohnwu.magisk.data.database.MagiskDB;
+import com.topjohnwu.magisk.data.database.RepoDatabaseHelper;
+import com.topjohnwu.magisk.ui.base.BaseActivity;
 import com.topjohnwu.magisk.utils.LocaleManager;
 import com.topjohnwu.magisk.utils.RootUtils;
 import com.topjohnwu.net.Networking;
