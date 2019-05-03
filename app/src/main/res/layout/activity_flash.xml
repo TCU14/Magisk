@@ -77,7 +77,7 @@
                             style="@style/Widget.Icon"
                             android:layout_gravity="center"
                             android:background="@android:color/transparent"
-                            app:srcCompat="@drawable/ic_save"
+                            app:srcCompat="@drawable/ic_save_compat"
                             app:tint="@android:color/white" />
 
                     </FrameLayout>
@@ -96,9 +96,11 @@
             <androidx.recyclerview.widget.RecyclerView
                 itemBinding="@{viewModel.itemBinding}"
                 items="@{viewModel.items}"
+                android:id="@+id/flash_content"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:orientation="vertical"
+                scrollToLast="@{true}"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
                 tools:listitem="@layout/item_console" />
 
