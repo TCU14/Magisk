@@ -49,11 +49,6 @@ static inline int read_ns(const int pid, struct stat *st) {
 	return stat(path, st);
 }
 
-static inline void lazy_unmount(const char* mountpoint) {
-	if (umount2(mountpoint, MNT_DETACH) != -1)
-		LOGD("hide_daemon: Unmounted (%s)\n", mountpoint);
-}
-
 static int parse_ppid(int pid) {
 	char path[32];
 	int ppid;
@@ -159,8 +154,8 @@ static void setup_inotify() {
 	// Setup inotify asynchronous I/O
 	fcntl(inotify_fd, F_SETFL, O_ASYNC);
 	struct f_owner_ex ex = {
-			.type = F_OWNER_TID,
-			.pid = gettid()
+		.type = F_OWNER_TID,
+		.pid = gettid()
 	};
 	fcntl(inotify_fd, F_SETOWN_EX, &ex);
 
@@ -175,57 +170,6 @@ static void setup_inotify() {
 	} else {
 		inotify_add_watch(inotify_fd, APP_PROC, IN_ACCESS);
 	}
-}
-
-/*************************
- * The actual hide daemon
- *************************/
-
-static void hide_daemon(int pid) {
-	RunFinally fin([=]() -> void {
-		// Send resume signal
-		tgkill(pid, pid, SIGCONT);
-		_exit(0);
-	});
-
-	if (switch_mnt_ns(pid))
-		return;
-
-	LOGD("hide_daemon: handling PID=[%d]\n", pid);
-	manage_selinux();
-	clean_magisk_props();
-
-	vector<string> targets;
-
-	// Unmount dummy skeletons and /sbin links
-	file_readline("/proc/self/mounts", [&](string_view s) -> bool {
-		if (str_contains(s, "tmpfs /system/") || str_contains(s, "tmpfs /vendor/") ||
-			str_contains(s, "tmpfs /sbin")) {
-			char *path = (char *) s.data();
-			// Skip first token
-			strtok_r(nullptr, " ", &path);
-			targets.emplace_back(strtok_r(nullptr, " ", &path));
-		}
-		return true;
-	});
-
-	for (auto &s : targets)
-		lazy_unmount(s.data());
-	targets.clear();
-
-	// Unmount all Magisk created mounts
-	file_readline("/proc/self/mounts", [&](string_view s) -> bool {
-		if (str_contains(s, BLOCKDIR)) {
-			char *path = (char *) s.data();
-			// Skip first token
-			strtok_r(nullptr, " ", &path);
-			targets.emplace_back(strtok_r(nullptr, " ", &path));
-		}
-		return true;
-	});
-
-	for (auto &s : targets)
-		lazy_unmount(s.data());
 }
 
 /************************
@@ -285,6 +229,7 @@ static void term_thread(int) {
 
 static void detach_pid(int pid, int signal = 0) {
 	char path[128];
+	attaches[pid] = false;
 	xptrace(PTRACE_DETACH, pid, nullptr, signal);
 
 	// Detach all child threads too
@@ -317,10 +262,6 @@ static bool check_pid(int pid) {
 	fclose(f);
 	if (strncmp(cmdline, "zygote", 6) == 0)
 		return false;
-
-	/* This process is fully initialized, we will stop
-	 * tracing it no matter if it is a target or not. */
-	attaches[pid] = false;
 
 	sprintf(path, "/proc/%d", pid);
 	struct stat st;
@@ -415,11 +356,11 @@ void proc_monitor() {
 				/* This mean we have nothing to wait, sleep
 				 * and wait till signal interruption */
 				LOGD("proc_monitor: nothing to monitor, wait for signal\n");
-				struct timespec timespec = {
+				struct timespec ts = {
 					.tv_sec = INT_MAX,
 					.tv_nsec = 0
 				};
-				nanosleep(&timespec, nullptr);
+				nanosleep(&ts, nullptr);
 			}
 			continue;
 		}
@@ -430,12 +371,13 @@ void proc_monitor() {
 				attaches[pid] = false;
 				detaches[pid] = false;
 				ptrace(PTRACE_DETACH, pid, 0, 0);
+				PTRACE_LOG("detach\n");
 			}
 		});
-		if (!WIFSTOPPED(status) || detaches[pid]) {
-			PTRACE_LOG("detached\n");
+
+		if (!WIFSTOPPED(status) /* Ignore if not ptrace-stop */ || detaches[pid])
 			DETACH_AND_CONT;
-		}
+
 		if (WSTOPSIG(status) == SIGTRAP && WEVENT(status)) {
 			unsigned long msg;
 			xptrace(PTRACE_GETEVENTMSG, pid, nullptr, &msg);
@@ -449,13 +391,11 @@ void proc_monitor() {
 						break;
 					case PTRACE_EVENT_EXIT:
 						PTRACE_LOG("zygote exited with status: [%d]\n", msg);
+						[[fallthrough]];
+					default:
 						zygote_map.erase(pid);
 						DETACH_AND_CONT;
-					default:
-						PTRACE_LOG("unknown event: %d\n", WEVENT(status));
-						break;
 				}
-				xptrace(PTRACE_CONT, pid);
 			} else {
 				switch (WEVENT(status)) {
 					case PTRACE_EVENT_CLONE:
@@ -465,14 +405,13 @@ void proc_monitor() {
 						break;
 					case PTRACE_EVENT_EXEC:
 					case PTRACE_EVENT_EXIT:
-						PTRACE_LOG("exited or execve\n");
-						DETACH_AND_CONT;
+						PTRACE_LOG("exit or execve\n");
+						[[fallthrough]];
 					default:
-						PTRACE_LOG("unknown event: %d\n", WEVENT(status));
-						break;
+						DETACH_AND_CONT;
 				}
-				xptrace(PTRACE_CONT, pid);
 			}
+			xptrace(PTRACE_CONT, pid);
 		} else if (WSTOPSIG(status) == SIGSTOP) {
 			PTRACE_LOG("SIGSTOP from child\n");
 			xptrace(PTRACE_SETOPTIONS, pid, nullptr,
