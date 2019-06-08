@@ -37,9 +37,7 @@ class MagiskRepository(
         .flatMap { apiRaw.fetchFile(it.uninstaller.link) }
         .map { it.writeToFile(context, FILE_UNINSTALLER_ZIP) }
 
-    fun fetchSafetynet() = apiRaw
-        .fetchSafetynet()
-        .map { it.writeToFile(context, FILE_SAFETY_NET_APK) }
+    fun fetchSafetynet() = apiRaw.fetchSafetynet()
 
     fun fetchBootctl() = apiRaw
         .fetchBootctl()
@@ -77,16 +75,6 @@ class MagiskRepository(
         Config.uninstallerLink = it.uninstaller.link
     }
 
-
-    fun fetchMagiskVersion(): Single<Version> = Single.zip(
-        fetchMagiskVersionName(),
-        fetchMagiskVersionCode(),
-        BiFunction { versionName, versionCode ->
-            Version(versionName, versionCode)
-        }
-    )
-
-
     fun fetchApps() =
         Single.fromCallable { packageManager.getInstalledApplications(0) }
             .flattenAsFlowable { it }
@@ -104,16 +92,6 @@ class MagiskRepository(
         .flattenAsFlowable { it }
         .map { HideTarget(it) }
         .toList()
-
-    private fun fetchMagiskVersionName() = "magisk -v".suRaw()
-        .map { it.first() }
-        .map { it.substring(0 until it.indexOf(":")) }
-        .onErrorReturn { "Unknown" }
-
-    private fun fetchMagiskVersionCode() = "magisk -V".suRaw()
-        .map { it.first() }
-        .map { it.toIntOrNull() ?: -1 }
-        .onErrorReturn { -1 }
 
     fun toggleHide(isEnabled: Boolean, packageName: String, process: String) =
         "magiskhide --%s %s %s".format(isEnabled.state, packageName, process).su().ignoreElement()

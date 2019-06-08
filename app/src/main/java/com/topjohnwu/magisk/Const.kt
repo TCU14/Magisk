@@ -67,8 +67,6 @@ object Const {
         const val XDA_THREAD = "https://forum.xda-developers.com/apps/magisk/unofficial-magisk-v10-beta-built-t3521901"
         const val SOURCE_CODE_URL = "https://github.com/ianmacd/Magisk/commits/master"
         @JvmField
-        val SNET_URL = getRaw("b66b1a914978e5f4c4bbfd74a59f4ad371bac107", "snet.apk")
-        @JvmField
         val BOOTCTL_URL = getRaw("9c5dfc1b8245c0b5b524901ef0ff0f8335757b77", "bootctl")
         const val GITHUB_RAW_API_URL = "https://raw.githubusercontent.com/"
 
