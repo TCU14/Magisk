@@ -2,7 +2,8 @@ package com.topjohnwu.magisk.di
 
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
-import com.topjohnwu.magisk.Constants
+import com.topjohnwu.magisk.BuildConfig
+import com.topjohnwu.magisk.Const
 import com.topjohnwu.magisk.data.network.GithubRawApiServices
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -19,17 +20,20 @@ val networkingModule = module {
     single { createConverterFactory() }
     single { createCallAdapterFactory() }
     single { createRetrofit(get(), get(), get()) }
-    single { createApiService<GithubRawApiServices>(get(), Constants.GITHUB_RAW_API_URL) }
+    single { createApiService<GithubRawApiServices>(get(), Const.Url.GITHUB_RAW_API_URL) }
 }
 
 fun createOkHttpClient(): OkHttpClient {
-    val httpLoggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+    val builder = OkHttpClient.Builder()
+
+    if (BuildConfig.DEBUG) {
+        val httpLoggingInterceptor = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
+        builder.addInterceptor(httpLoggingInterceptor)
     }
 
-    return OkHttpClient.Builder()
-        .addInterceptor(httpLoggingInterceptor)
-        .build()
+    return builder.build()
 }
 
 fun createConverterFactory(): Converter.Factory {
