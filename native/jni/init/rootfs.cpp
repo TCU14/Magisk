@@ -37,10 +37,10 @@ constexpr const char wrapper[] =
 "exec /sbin/magisk.bin \"$0\" \"$@\"\n"
 ;
 
-void MagiskInit::setup_rootfs() {
+void BaseInit::setup_rootfs() {
 	bool patch_init = patch_sepolicy();
 
-	if (cmd.system_as_root) {
+	if (cmd->system_as_root) {
 		// Clone rootfs
 		LOGD("Clone root dir from system to rootfs\n");
 		int system_root = xopen("/system_root", O_RDONLY | O_CLOEXEC);
@@ -173,7 +173,7 @@ void MagiskInit::setup_rootfs() {
 	close(sbin);
 }
 
-bool MagiskInit::patch_sepolicy() {
+bool BaseInit::patch_sepolicy() {
 	bool patch_init = false;
 
 	if (access(SPLIT_PLAT_CIL, R_OK) == 0) {
