@@ -1,7 +1,7 @@
 package com.topjohnwu.magisk.data.network
 
 import com.topjohnwu.magisk.Const
-import com.topjohnwu.magisk.model.entity.MagiskConfig
+import com.topjohnwu.magisk.model.entity.UpdateInfo
 import io.reactivex.Single
 import okhttp3.ResponseBody
 import retrofit2.http.GET
@@ -15,22 +15,19 @@ interface GithubRawApiServices {
     //region topjohnwu/magisk_files
 
     @GET("$MAGISK_FILES/master/stable.json")
-    fun fetchStableUpdate(): Single<MagiskConfig>
+    fun fetchStableUpdate(): Single<UpdateInfo>
 
     @GET("$MAGISK_FILES/master/beta.json")
-    fun fetchBetaUpdate(): Single<MagiskConfig>
+    fun fetchBetaUpdate(): Single<UpdateInfo>
 
     @GET("$MAGISK_FILES/master/canary_builds/release.json")
-    fun fetchCanaryUpdate(): Single<MagiskConfig>
+    fun fetchCanaryUpdate(): Single<UpdateInfo>
 
     @GET("$MAGISK_FILES/master/canary_builds/canary.json")
-    fun fetchCanaryDebugUpdate(): Single<MagiskConfig>
-
-    @GET("$IANMACD_FILES/master/updates/ianmacd.json")
-    fun fetchIanmacdUpdate(): Single<MagiskConfig>
+    fun fetchCanaryDebugUpdate(): Single<UpdateInfo>
 
     @GET
-    fun fetchCustomUpdate(@Url url: String): Single<MagiskConfig>
+    fun fetchCustomUpdate(@Url url: String): Single<UpdateInfo>
 
     @GET("$MAGISK_FILES/{$REVISION}/snet.apk")
     @Streaming
@@ -45,7 +42,7 @@ interface GithubRawApiServices {
     //region ianmacd/MagiskBuilds
 
     @GET("$IANMACD_FILES/master/updates/ianmacd.json")
-    fun fetchIanmacdConfig(): Single<MagiskConfig>
+    fun fetchIanmacdUpdate(): Single<UpdateInfo>
 
     //endregion
 
