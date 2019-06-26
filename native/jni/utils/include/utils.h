@@ -3,13 +3,16 @@
 
 #pragma once
 
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 #include <stdio.h>
 #include <dirent.h>
 #include <pthread.h>
 #include <poll.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
+#include <mntent.h>
+
+#include "missing.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,12 +88,6 @@ char *rtrim(char *str);
 void init_argv0(int argc, char **argv);
 void set_nice_name(const char *name);
 int parse_int(const char *s);
-
-#define getline __getline
-#define getdelim __getdelim
-
-ssize_t __getline(char **lineptr, size_t *n, FILE *stream);
-ssize_t __getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
 
 // file.cpp
 
@@ -173,6 +170,7 @@ void parse_prop_file(const char *file, const std::function
 void *__mmap(const char *filename, size_t *size, bool rw);
 void frm_rf(int dirfd, std::initializer_list<const char *> excl = std::initializer_list<const char *>());
 void clone_dir(int src, int dest, bool overwrite = true);
+void parse_mnt(const char *file, const std::function<bool (mntent*)> &fn);
 
 template <typename B>
 void mmap_ro(const char *filename, B &buf, size_t &sz) {

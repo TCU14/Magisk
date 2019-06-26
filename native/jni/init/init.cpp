@@ -45,6 +45,16 @@ static void setup_klog() {
 	unlink("/kmsg");
 	log_cb.d = log_cb.i = log_cb.w = log_cb.e = vprintk;
 	log_cb.ex = nop_ex;
+
+	// Prevent file descriptor confusion
+	mknod("/null", S_IFCHR | 0666, makedev(1, 3));
+	int null = open("/null", O_RDWR | O_CLOEXEC);
+	unlink("/null");
+	xdup3(null, STDIN_FILENO, O_CLOEXEC);
+	xdup3(null, STDOUT_FILENO, O_CLOEXEC);
+	xdup3(null, STDERR_FILENO, O_CLOEXEC);
+	if (null > STDERR_FILENO)
+		close(null);
 }
 #else
 #define setup_klog(...)
@@ -115,6 +125,7 @@ static int dump_manager(const char *path, mode_t mode) {
 void BaseInit::cleanup() {
 	umount("/sys");
 	umount("/proc");
+	umount("/dev");
 }
 
 void BaseInit::re_exec_init() {
@@ -124,36 +135,15 @@ void BaseInit::re_exec_init() {
 	exit(1);
 }
 
-void LegacyInit::preset() {
-	full_read("/init", &self.buf, &self.sz);
-
-	LOGD("Reverting /init\n");
-	root = open("/", O_RDONLY | O_CLOEXEC);
-	rename("/.backup/init", "/init");
-}
-
-void SARCompatInit::preset() {
-	full_read("/init", &self.buf, &self.sz);
-
-	LOGD("Cleaning rootfs\n");
-	root = open("/", O_RDONLY | O_CLOEXEC);
-	frm_rf(root, { "overlay", "proc", "sys" });
-}
-
-void MagiskInit::start() {
-	// Prevent file descriptor confusion
-	mknod("/null", S_IFCHR | 0666, makedev(1, 3));
-	int null = open("/null", O_RDWR | O_CLOEXEC);
-	unlink("/null");
-	xdup3(null, STDIN_FILENO, O_CLOEXEC);
-	xdup3(null, STDOUT_FILENO, O_CLOEXEC);
-	xdup3(null, STDERR_FILENO, O_CLOEXEC);
-	if (null > STDERR_FILENO)
-		close(null);
-
-	preset();
+void RootFSInit::start() {
 	early_mount();
 	setup_rootfs();
+	re_exec_init();
+}
+
+void SARInit::start() {
+	early_mount();
+	patch_rootdir();
 	re_exec_init();
 }
 
@@ -168,16 +158,40 @@ public:
 	}
 };
 
-class TestInit : public SARCompatInit {
+class TestInit : public SARInit {
 public:
-	TestInit(char *argv[], cmdline *cmd) : SARCompatInit(argv, cmd) {};
+	TestInit(char *argv[], cmdline *cmd) : SARInit(argv, cmd) {};
 	void start() override {
-		preset();
 		early_mount();
-		setup_rootfs();
+		patch_rootdir();
 		cleanup();
 	}
 };
+
+static void setup_test(const char *dir) {
+	// Log to console
+	cmdline_logging();
+	log_cb.ex = nop_ex;
+
+	// Switch to isolate namespace
+	xunshare(CLONE_NEWNS);
+	xmount(nullptr, "/", nullptr, MS_PRIVATE | MS_REC, nullptr);
+
+	// Unmount everything in reverse
+	vector<string> mounts;
+	parse_mnt("/proc/mounts", [&](mntent *me) {
+		if (me->mnt_dir != "/"sv)
+			mounts.emplace_back(me->mnt_dir);
+		return true;
+	});
+	for (auto m = mounts.rbegin(); m != mounts.rend(); ++m)
+		xumount(m->data());
+
+	// chroot jail
+	chdir(dir);
+	chroot(".");
+	chdir("/");
+}
 
 int main(int argc, char *argv[]) {
 	umask(0);
@@ -201,11 +215,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 	if (run_test) {
-		chdir(dirname(argv[0]));
-		chroot(".");
-		chdir("/");
-		cmdline_logging();
-		log_cb.ex = nop_ex;
+		setup_test(dirname(argv[0]));
 	} else {
 		if (getpid() != 1)
 			return 1;
@@ -219,7 +229,10 @@ int main(int argc, char *argv[]) {
 	if (run_test) {
 		init = make_unique<TestInit>(argv, &cmd);
 	} else if (cmd.system_as_root) {
-		init = make_unique<SARCompatInit>(argv, &cmd);
+		if (access("/overlay", F_OK) == 0)  /* Compatible mode */
+			init = make_unique<SARCompatInit>(argv, &cmd);
+		else
+			init = make_unique<SARInit>(argv, &cmd);
 	} else {
 		decompress_ramdisk();
 		if (access("/sbin/recovery", F_OK) == 0)

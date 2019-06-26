@@ -53,18 +53,21 @@ static void collect_devices() {
 	closedir(dir);
 }
 
-static void setup_block(const char *partname, char *block_dev) {
+static dev_t setup_block(const char *partname, char *block_dev = nullptr) {
 	if (dev_list.empty())
 		collect_devices();
 	for (;;) {
 		for (auto &dev : dev_list) {
 			if (strcasecmp(dev.partname, partname) == 0) {
-				sprintf(block_dev, "/dev/block/%s", dev.devname);
-				LOGD("Found %s: [%s] (%d, %d)\n", dev.partname, dev.devname, dev.major, dev.minor);
 				xmkdir("/dev", 0755);
-				xmkdir("/dev/block", 0755);
-				mknod(block_dev, S_IFBLK | 0600, makedev(dev.major, dev.minor));
-				return;
+				if (block_dev) {
+					sprintf(block_dev, "/dev/block/%s", dev.devname);
+					xmkdir("/dev/block", 0755);
+				}
+				LOGD("Found %s: [%s] (%d, %d)\n", dev.partname, dev.devname, dev.major, dev.minor);
+				dev_t rdev = makedev(dev.major, dev.minor);
+				mknod(block_dev ? block_dev : "/dev/root", S_IFBLK | 0600, rdev);
+				return rdev;
 			}
 		}
 		// Wait 10ms and try again
@@ -112,6 +115,12 @@ void LegacyInit::early_mount() {
 	char fstype[32];
 	char block_dev[64];
 
+	full_read("/init", &self.buf, &self.sz);
+
+	LOGD("Reverting /init\n");
+	root = xopen("/", O_RDONLY | O_CLOEXEC);
+	rename("/.backup/init", "/init");
+
 	mount_root(system);
 	mount_root(vendor);
 	mount_root(product);
@@ -123,6 +132,12 @@ void SARCompatInit::early_mount() {
 	char fstype[32];
 	char block_dev[64];
 
+	full_read("/init", &self.buf, &self.sz);
+
+	LOGD("Cleaning rootfs\n");
+	root = xopen("/", O_RDONLY | O_CLOEXEC);
+	frm_rf(root, { ".backup", "overlay", "proc", "sys" });
+
 	LOGD("Early mount system_root\n");
 	sprintf(partname, "system%s", cmd->slot);
 	setup_block(partname, block_dev);
@@ -132,17 +147,56 @@ void SARCompatInit::early_mount() {
 	xmkdir("/system", 0755);
 	xmount("/system_root/system", "/system", nullptr, MS_BIND, nullptr);
 
-	// Android Q
-	if (is_lnk("/system_root/init"))
-		load_sepol = true;
-
-	// System-as-root with monolithic sepolicy
-	if (access("/system_root/sepolicy", F_OK) == 0)
-		cp_afc("/system_root/sepolicy", "/sepolicy");
-
 	link_root("/vendor");
 	link_root("/product");
 	link_root("/odm");
+	mount_root(vendor);
+	mount_root(product);
+	mount_root(odm);
+}
+
+static void switch_root(const string &path) {
+	LOGD("Switch root to %s\n", path.data());
+	vector<string> mounts;
+	parse_mnt("/proc/mounts", [&](mntent *me) {
+		if (me->mnt_dir != "/"sv && me->mnt_dir != path)
+			mounts.emplace_back(me->mnt_dir);
+		return true;
+	});
+	for (auto &dir : mounts) {
+		auto new_path = path + dir;
+		mkdir(new_path.data(), 0755);
+		xmount(dir.data(), new_path.c_str(), nullptr, MS_MOVE, nullptr);
+	}
+	chdir(path.data());
+	xmount(path.data(), "/", nullptr, MS_MOVE, nullptr);
+	chroot(".");
+}
+
+void SARInit::early_mount() {
+	char partname[32];
+	char fstype[32];
+	char block_dev[64];
+
+	full_read("/init", &self.buf, &self.sz);
+	full_read("/.backup/.magisk", &config.buf, &config.sz);
+
+	LOGD("Cleaning rootfs\n");
+	int root = xopen("/", O_RDONLY | O_CLOEXEC);
+	frm_rf(root, { "proc", "sys" });
+	close(root);
+
+	LOGD("Early mount system_root\n");
+	sprintf(partname, "system%s", cmd->slot);
+	system_dev = setup_block(partname);
+	xmkdir("/system_root", 0755);
+	if (xmount("/dev/root", "/system_root", "ext4", MS_RDONLY, nullptr))
+		xmount("/dev/root", "/system_root", "erofs", MS_RDONLY, nullptr);
+	switch_root("/system_root");
+
+	// Make dev writable
+	xmount("tmpfs", "/dev", "tmpfs", 0, "mode=755");
+
 	mount_root(vendor);
 	mount_root(product);
 	mount_root(odm);
@@ -153,8 +207,8 @@ if (mnt_##name) \
 	umount("/" #name);
 
 void MagiskInit::cleanup() {
-	BaseInit::cleanup();
 	umount(SELINUX_MNT);
+	BaseInit::cleanup();
 	umount_root(system);
 	umount_root(vendor);
 	umount_root(product);
