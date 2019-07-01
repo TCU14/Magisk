@@ -1,9 +1,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/mount.h>
 #include <fcntl.h>
 
 #include <magisk.h>
+#include <magiskpolicy.h>
 #include <utils.h>
 
 #include "init.h"
@@ -223,15 +223,15 @@ void SARCommon::patch_rootdir() {
 			xreadlinkat(src, entry->d_name, buf, sizeof(buf));
 			xsymlinkat(buf, dest, entry->d_name);
 		} else {
-			char tpath[256];
+			char spath[256];
 			sprintf(buf, "/sbin/%s", entry->d_name);
-			sprintf(tpath, ROOTMIR "/sbin/%s", entry->d_name);
+			sprintf(spath, ROOTMIR "/sbin/%s", entry->d_name);
 			// Create dummy
 			if (S_ISDIR(st.st_mode))
-				xmkdir(tpath, st.st_mode & 0777);
+				xmkdir(buf, st.st_mode & 0777);
 			else
-				close(xopen(tpath, O_CREAT | O_WRONLY | O_CLOEXEC, st.st_mode & 0777));
-			xmount(tpath, buf, nullptr, MS_BIND, nullptr);
+				close(xopen(buf, O_CREAT | O_WRONLY | O_CLOEXEC, st.st_mode & 0777));
+			xmount(spath, buf, nullptr, MS_BIND, nullptr);
 		}
 	}
 	close(src);
@@ -396,19 +396,18 @@ int magisk_proxy_main(int argc, char *argv[]) {
 	sbin_overlay(self, config);
 
 	// Create symlinks pointing back to /root
-	{
-		char path[256];
-		int sbin = xopen("/sbin", O_RDONLY | O_CLOEXEC);
-		unique_ptr<DIR, decltype(&closedir)> dir(xopendir("/root"), &closedir);
-		struct dirent *entry;
-		while((entry = xreaddir(dir.get()))) {
-			if (entry->d_name == "."sv || entry->d_name == ".."sv)
-				continue;
-			sprintf(path, "/root/%s", entry->d_name);
-			xsymlinkat(path, sbin, entry->d_name);
-		}
-		close(sbin);
+	char path[256];
+	int sbin = xopen("/sbin", O_RDONLY | O_CLOEXEC);
+	DIR *dir = xopendir("/root");
+	struct dirent *entry;
+	while((entry = xreaddir(dir))) {
+		if (entry->d_name == "."sv || entry->d_name == ".."sv)
+			continue;
+		sprintf(path, "/root/%s", entry->d_name);
+		xsymlinkat(path, sbin, entry->d_name);
 	}
+	close(sbin);
+	closedir(dir);
 
 	setenv("REMOUNT_ROOT", "1", 1);
 	execv("/sbin/magisk", argv);
