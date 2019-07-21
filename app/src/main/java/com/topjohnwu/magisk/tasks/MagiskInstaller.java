@@ -11,7 +11,6 @@ import com.topjohnwu.magisk.App;
 import com.topjohnwu.magisk.Const;
 import com.topjohnwu.magisk.Info;
 import com.topjohnwu.magisk.utils.Utils;
-import com.topjohnwu.net.DownloadProgressListener;
 import com.topjohnwu.net.Networking;
 import com.topjohnwu.signing.SignBoot;
 import com.topjohnwu.superuser.Shell;
@@ -46,28 +45,11 @@ public abstract class MagiskInstaller {
     protected String srcBoot;
     protected File destFile;
     protected File installDir;
+    protected File zipFile = new File(App.self.getCacheDir(), "magisk.zip");
 
-    private List<String> console, logs;
+    private final List<String> console;
+    private final List<String> logs;
     private boolean isTar = false;
-
-    private class ProgressLog implements DownloadProgressListener {
-
-        private int prev = -1;
-        private int location;
-
-        @Override
-        public void onProgress(long bytesDownloaded, long totalBytes) {
-            if (prev < 0) {
-                location = console.size();
-                console.add("... 0%");
-            }
-            int curr = (int) (100 * bytesDownloaded / totalBytes);
-            if (prev != curr) {
-                prev = curr;
-                console.set(location, "... " + prev + "%");
-            }
-        }
-    }
 
     protected MagiskInstaller() {
         console = NOPList.getInstance();
@@ -94,7 +76,7 @@ public abstract class MagiskInstaller {
 
     protected boolean findSecondaryImage() {
         String slot = ShellUtils.fastCmd("echo $SLOT");
-        String target = (TextUtils.equals(slot, "_a") ? "_b" : "_a");
+        String target = TextUtils.equals(slot, "_a") ? "_b" : "_a";
         console.add("- Target slot: " + target);
         srcBoot = ShellUtils.fastCmd(
                 "SLOT=" + target,
@@ -121,20 +103,9 @@ public abstract class MagiskInstaller {
 
         console.add("- Device platform: " + Build.CPU_ABI);
 
-        File zip = new File(App.self.getCacheDir(), "magisk.zip");
-
-        if (!ShellUtils.checkSum("MD5", zip, Info.remote.getMagisk().getHash())) {
-            console.add("- Downloading zip from " + Info.remote.getMagisk().getLink());
-            Networking.get(Info.remote.getMagisk().getLink())
-                    .setDownloadProgressListener(new ProgressLog())
-                    .execForFile(zip);
-        } else {
-            console.add("- Existing zip found in " + App.self.getFilesDir());
-        }
-
         try {
             ZipInputStream zi = new ZipInputStream(new BufferedInputStream(
-                    new FileInputStream(zip), (int) zip.length()));
+                    new FileInputStream(zipFile), (int) zipFile.length()));
             ZipEntry ze;
             while ((ze = zi.getNextEntry()) != null) {
                 if (ze.isDirectory())
@@ -151,7 +122,7 @@ public abstract class MagiskInstaller {
                     name = ze.getName();
                 if (name == null)
                     continue;
-                File dest = (installDir instanceof SuFile) ?
+                File dest = installDir instanceof SuFile ?
                         new SuFile(installDir, name) :
                         new File(installDir, name);
                 dest.getParentFile().mkdirs();

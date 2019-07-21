@@ -28,7 +28,8 @@ import java.util.*
 
 class FlashViewModel(
     action: String,
-    uri: Uri?,
+    installer: Uri,
+    uri: Uri,
     private val resources: Resources
 ) : MagiskViewModel(), FlashResultListener {
 
@@ -52,22 +53,21 @@ class FlashViewModel(
 
         state = State.LOADING
 
-        val uri = uri ?: Uri.EMPTY
         when (action) {
             Const.Value.FLASH_ZIP -> Flashing
-                .Install(uri, outItems, logItems, this)
+                .Install(installer, outItems, logItems, this)
                 .exec()
             Const.Value.UNINSTALL -> Flashing
-                .Uninstall(uri, outItems, logItems, this)
+                .Uninstall(installer, outItems, logItems, this)
                 .exec()
             Const.Value.FLASH_MAGISK -> Patching
-                .Direct(outItems, logItems, this)
+                .Direct(installer, outItems, logItems, this)
                 .exec()
             Const.Value.FLASH_INACTIVE_SLOT -> Patching
-                .SecondSlot(outItems, logItems, this)
+                .SecondSlot(installer, outItems, logItems, this)
                 .exec()
             Const.Value.PATCH_FILE -> Patching
-                .File(uri, outItems, logItems, this)
+                .File(installer, uri, outItems, logItems, this)
                 .exec()
         }
     }

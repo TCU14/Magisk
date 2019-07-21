@@ -50,21 +50,22 @@ val ApplicationInfo.packageInfo: PackageInfo?
         }
     }
 
-val Uri.fileName: String get() {
-    var name: String? = null
-    App.self.contentResolver.query(this, null, null, null, null)?.use { c ->
-        val nameIndex = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        if (nameIndex != -1) {
-            c.moveToFirst()
-            name = c.getString(nameIndex)
+val Uri.fileName: String
+    get() {
+        var name: String? = null
+        App.self.contentResolver.query(this, null, null, null, null)?.use { c ->
+            val nameIndex = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (nameIndex != -1) {
+                c.moveToFirst()
+                name = c.getString(nameIndex)
+            }
         }
+        if (name == null && path != null) {
+            val idx = path!!.lastIndexOf('/')
+            name = path!!.substring(idx + 1)
+        }
+        return name.orEmpty()
     }
-    if (name == null && path != null) {
-        val idx = path!!.lastIndexOf('/')
-        name = path!!.substring(idx + 1)
-    }
-    return name.orEmpty()
-}
 
 fun PackageManager.activities(packageName: String) =
     getPackageInfo(packageName, GET_ACTIVITIES)
@@ -80,17 +81,17 @@ fun PackageManager.providers(packageName: String) =
 
 fun Context.rawResource(id: Int) = resources.openRawResource(id)
 
-fun Context.readUri(uri: Uri) = contentResolver.openInputStream(uri) ?: throw FileNotFoundException()
+fun Context.readUri(uri: Uri) =
+    contentResolver.openInputStream(uri) ?: throw FileNotFoundException()
 
 fun ApplicationInfo.findAppLabel(pm: PackageManager): String {
-    return pm.getApplicationLabel(this)?.toString().orEmpty()
+    return pm.getApplicationLabel(this).toString().orEmpty()
 }
 
 fun Intent.startActivity(context: Context) = context.startActivity(this)
 
-fun File.provide(): Uri {
-    val context: Context by inject()
-    return FileProvider.getUriForFile(context, "com.topjohnwu.magisk.fileprovider", this)
+fun File.provide(context: Context = get()): Uri {
+    return FileProvider.getUriForFile(context, context.packageName + ".provider", this)
 }
 
 fun File.mv(destination: File) {
