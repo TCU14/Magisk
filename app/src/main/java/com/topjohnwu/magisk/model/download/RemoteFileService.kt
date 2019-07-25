@@ -49,9 +49,10 @@ abstract class RemoteFileService : NotificationService() {
         .onErrorResumeNext(download(subject))
         .doOnSubscribe { update(subject.hashCode()) { it.setContentTitle(subject.title) } }
         .observeOn(AndroidSchedulers.mainThread())
+        .doOnError { remove(subject.hashCode()) }
         .doOnSuccess {
-            runCatching { onFinished(it, subject) }.onFailure { Timber.e(it) }
-            finish(it, subject)
+            val id = finish(it, subject)
+            runCatching { onFinished(it, subject, id) }.onFailure { Timber.e(it) }
         }.subscribeK()
 
     private fun search(subject: DownloadSubject) = Single.fromCallable {
@@ -92,7 +93,6 @@ abstract class RemoteFileService : NotificationService() {
 
         return ProgInputStream(byteStream()) {
             val progress = it / 1_000_000f
-
             update(id) { notification ->
                 notification
                     .setProgress(maxRaw.toInt(), it.toInt(), false)
@@ -114,7 +114,7 @@ abstract class RemoteFileService : NotificationService() {
 
 
     @Throws(Throwable::class)
-    protected abstract fun onFinished(file: File, subject: DownloadSubject)
+    protected abstract fun onFinished(file: File, subject: DownloadSubject, id: Int)
 
     protected abstract fun NotificationCompat.Builder.addActions(
         file: File,
