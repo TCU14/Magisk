@@ -1,21 +1,22 @@
 package com.topjohnwu.magisk.model.download
 
+import android.app.Activity
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.skoumal.teanity.extensions.subscribeK
 import com.topjohnwu.magisk.Config
 import com.topjohnwu.magisk.R
-import com.topjohnwu.magisk.data.repository.FileRepository
+import com.topjohnwu.magisk.data.network.GithubRawServices
+import com.topjohnwu.magisk.extensions.firstMap
+import com.topjohnwu.magisk.extensions.get
+import com.topjohnwu.magisk.extensions.writeTo
 import com.topjohnwu.magisk.model.entity.internal.DownloadSubject
 import com.topjohnwu.magisk.model.entity.internal.DownloadSubject.Magisk
 import com.topjohnwu.magisk.model.entity.internal.DownloadSubject.Module
 import com.topjohnwu.magisk.utils.ProgInputStream
-import com.topjohnwu.magisk.utils.firstMap
-import com.topjohnwu.magisk.utils.writeTo
 import com.topjohnwu.magisk.view.Notifications
 import com.topjohnwu.superuser.ShellUtils
 import io.reactivex.Single
-import io.reactivex.android.schedulers.AndroidSchedulers
 import okhttp3.ResponseBody
 import org.koin.android.ext.android.inject
 import timber.log.Timber
@@ -24,10 +25,10 @@ import java.io.InputStream
 
 abstract class RemoteFileService : NotificationService() {
 
-    private val repo by inject<FileRepository>()
+    private val service: GithubRawServices by inject()
 
     private val supportedFolders
-        get() = listOfNotNull(
+        get() = listOf(
             cacheDir,
             Config.downloadDirectory
         )
@@ -47,12 +48,15 @@ abstract class RemoteFileService : NotificationService() {
     private fun start(subject: DownloadSubject) = search(subject)
         .onErrorResumeNext(download(subject))
         .doOnSubscribe { update(subject.hashCode()) { it.setContentTitle(subject.title) } }
-        .observeOn(AndroidSchedulers.mainThread())
-        .doOnError { remove(subject.hashCode()) }
-        .doOnSuccess {
-            val id = finish(it, subject)
-            runCatching { onFinished(it, subject, id) }.onFailure { Timber.e(it) }
-        }.subscribeK()
+        .subscribeK(onError = {
+            Timber.e(it)
+            remove(subject.hashCode())
+        }) {
+            val newId = finishNotify(it, subject)
+            get<Activity?>()?.run {
+                onFinished(it, subject, newId)
+            }
+        }
 
     private fun search(subject: DownloadSubject) = Single.fromCallable {
         if (!Config.isDownloadCacheEnabled) {
@@ -68,11 +72,11 @@ abstract class RemoteFileService : NotificationService() {
         }
     }
 
-    private fun download(subject: DownloadSubject) = repo.downloadFile(subject.url)
+    private fun download(subject: DownloadSubject) = service.fetchFile(subject.url)
         .map { it.toStream(subject.hashCode()) }
         .flatMap { stream ->
             when (subject) {
-                is Module -> repo.downloadInstaller()
+                is Module -> service.fetchInstaller()
                         .map { stream.toModule(subject.file, it.byteStream()); subject.file }
                 else -> Single.fromCallable { stream.writeTo(subject.file); subject.file }
             }
@@ -98,7 +102,7 @@ abstract class RemoteFileService : NotificationService() {
         }
     }
 
-    private fun finish(file: File, subject: DownloadSubject) = finishWork(subject.hashCode()) {
+    private fun finishNotify(file: File, subject: DownloadSubject) = finishNotify(subject.hashCode()) {
         it.addActions(file, subject)
             .setContentText(getString(R.string.download_complete))
             .setSmallIcon(android.R.drawable.stat_sys_download_done)

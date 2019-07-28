@@ -1,24 +1,22 @@
 package com.topjohnwu.magisk.data.repository
 
-import android.content.Context
 import android.content.pm.PackageManager
 import com.topjohnwu.magisk.App
 import com.topjohnwu.magisk.Config
 import com.topjohnwu.magisk.Info
 import com.topjohnwu.magisk.data.database.base.su
-import com.topjohnwu.magisk.data.network.GithubRawApiServices
+import com.topjohnwu.magisk.data.network.GithubRawServices
+import com.topjohnwu.magisk.extensions.inject
+import com.topjohnwu.magisk.extensions.toSingle
 import com.topjohnwu.magisk.model.entity.HideAppInfo
 import com.topjohnwu.magisk.model.entity.HideTarget
 import com.topjohnwu.magisk.utils.Utils
-import com.topjohnwu.magisk.utils.inject
-import com.topjohnwu.magisk.utils.toSingle
 import com.topjohnwu.superuser.Shell
 import io.reactivex.Single
 
 class MagiskRepository(
-    private val context: Context,
-    private val apiRaw: GithubRawApiServices,
-    private val packageManager: PackageManager
+        private val apiRaw: GithubRawServices,
+        private val packageManager: PackageManager
 ) {
 
     fun fetchSafetynet() = apiRaw.fetchSafetynet()
