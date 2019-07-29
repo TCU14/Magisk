@@ -11,9 +11,8 @@ import com.topjohnwu.magisk.extensions.firstMap
 import com.topjohnwu.magisk.extensions.get
 import com.topjohnwu.magisk.extensions.writeTo
 import com.topjohnwu.magisk.model.entity.internal.DownloadSubject
-import com.topjohnwu.magisk.model.entity.internal.DownloadSubject.Magisk
-import com.topjohnwu.magisk.model.entity.internal.DownloadSubject.Module
-import com.topjohnwu.magisk.utils.ProgInputStream
+import com.topjohnwu.magisk.model.entity.internal.DownloadSubject.*
+import com.topjohnwu.magisk.utils.ProgressInputStream
 import com.topjohnwu.magisk.view.Notifications
 import com.topjohnwu.superuser.ShellUtils
 import io.reactivex.Single
@@ -50,7 +49,11 @@ abstract class RemoteFileService : NotificationService() {
         .doOnSubscribe { update(subject.hashCode()) { it.setContentTitle(subject.title) } }
         .subscribeK(onError = {
             Timber.e(it)
-            remove(subject.hashCode())
+            finishNotify(subject.hashCode()) { notification ->
+                notification.setContentText(getString(R.string.download_file_error))
+                        .setSmallIcon(android.R.drawable.stat_notify_error)
+                        .setOngoing(false)
+            }
         }) {
             val newId = finishNotify(it, subject)
             get<Activity?>()?.run {
@@ -80,6 +83,11 @@ abstract class RemoteFileService : NotificationService() {
                         .map { stream.toModule(subject.file, it.byteStream()); subject.file }
                 else -> Single.fromCallable { stream.writeTo(subject.file); subject.file }
             }
+        }.map {
+            when (subject) {
+                is Manager -> handleAPK(it, subject)
+                else -> it
+            }
         }
 
     // ---
@@ -92,7 +100,7 @@ abstract class RemoteFileService : NotificationService() {
         val maxRaw = contentLength()
         val max = maxRaw / 1_000_000f
 
-        return ProgInputStream(byteStream()) {
+        return ProgressInputStream(byteStream()) {
             val progress = it / 1_000_000f
             update(id) { notification ->
                 notification
