@@ -126,8 +126,7 @@ object Config : PreferenceModel, DBConfig {
     var suMntNamespaceMode by dbSettings(Key.SU_MNT_NS, Value.NAMESPACE_MODE_REQUESTER)
     var suMultiuserMode by dbSettings(Key.SU_MULTIUSER_MODE, Value.MULTIUSER_MODE_OWNER_ONLY)
     var suFingerprint by dbSettings(Key.SU_FINGERPRINT, false)
-    @JvmStatic
-    var suManager by dbStrings(Key.SU_MANAGER, "")
+    var suManager by dbStrings(Key.SU_MANAGER, "", true)
 
     // Always return a path in external storage where we can write
     val downloadDirectory get() =
@@ -200,7 +199,6 @@ object Config : PreferenceModel, DBConfig {
         }
     }
 
-    @JvmStatic
     fun export() {
         // Flush prefs to disk
         prefs.edit().apply()
