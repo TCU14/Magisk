@@ -1,19 +1,12 @@
 package com.topjohnwu.magisk
 
-import android.os.Environment
 import android.os.Process
-
 import java.io.File
 
 object Const {
 
-    const val DEBUG_TAG = "MagiskManager"
-
     // Paths
     const val MAGISK_PATH = "/sbin/.magisk/img"
-    @JvmField
-    val EXTERNAL_PATH = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)!!
-    @JvmField
     var MAGISK_DISABLE_FILE = File("xxx")
     const val TMP_FOLDER_PATH = "/dev/tmp"
     const val MAGISK_LOG = "/cache/magisk.log"
@@ -27,12 +20,7 @@ object Const {
     const val ANDROID_MANIFEST = "AndroidManifest.xml"
     const val MAGISK_INSTALL_LOG_FILENAME = "magisk_install_log_%s.log"
     const val MANAGER_CONFIGS = ".tmp.magisk.config"
-    @JvmField
     val USER_ID = Process.myUid() / 100000
-
-    init {
-        EXTERNAL_PATH.mkdirs()
-    }
 
     object MagiskVersion {
         const val MIN_SUPPORT = 18000
@@ -59,14 +47,8 @@ object Const {
         const val TWITTER_URL = "https://twitter.com/topjohnwu"
         const val XDA_THREAD = "https://forum.xda-developers.com/apps/magisk/unofficial-magisk-v10-beta-built-t3521901"
         const val SOURCE_CODE_URL = "https://github.com/ianmacd/Magisk/commits/master"
-        @JvmField
-        val BOOTCTL_URL = getRaw("9c5dfc1b8245c0b5b524901ef0ff0f8335757b77", "bootctl")
-
         const val GITHUB_RAW_URL = "https://raw.githubusercontent.com/"
         const val GITHUB_API_URL = "https://api.github.com/users/Magisk-Modules-Repo/"
-
-        private fun getRaw(where: String, name: String) =
-            "${GITHUB_RAW_URL}topjohnwu/magisk_files/$where/$name"
     }
 
     object Key {
@@ -91,6 +73,5 @@ object Const {
         const val FLASH_INACTIVE_SLOT = "slot"
         const val UNINSTALL = "uninstall"
     }
-
 
 }
