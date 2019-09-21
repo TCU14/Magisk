@@ -61,8 +61,9 @@ Supported actions:
         Test the current cpio's patch status
         Return values:
         0:stock    1:Magisk    2:unsupported (phh, SuperSU, Xposed)
-      patch KEEPVERITY KEEPFORCEENCRYPT
-        Ramdisk patches. KEEP**** are boolean values
+      patch
+        Apply ramdisk patches. Configure settings with env variables:
+        KEEPVERITY KEEPFORCEENCRYPT
       backup ORIG
         Create ramdisk backups from ORIG
       restore
@@ -70,18 +71,15 @@ Supported actions:
       sha1
         Print stock boot SHA1 if previously backed up in ramdisk
 
-  dtb <dtb> <command> [args...]
-    Do commands to <dtb> (modifications are done directly)
-    Supported commands:
+  dtb <input> <action> [args...]
+    Do dtb related actions to <input>
+    Supported actions:
       print [-f]
-        Print all contents from dtb for debugging
+        Print all contents of dtb for debugging
         Specify [-f] to only print fstab nodes
-      test
-        Check if fstab has verity/avb flags
-        Return values:
-        0:flag exists    1:no flags
-      patch
+      patch [OUT]
         Search for fstab and remove verity/avb
+        If [OUT] is not specified, it will directly output to <input>
 
   compress[=method] <infile> [outfile]
     Compress <infile> with [method] (default: gzip), optionally to [outfile]

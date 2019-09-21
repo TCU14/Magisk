@@ -59,6 +59,8 @@ BOOTIMAGE="$1"
 [ -z $KEEPVERITY ] && KEEPVERITY=false
 [ -z $KEEPFORCEENCRYPT ] && KEEPFORCEENCRYPT=false
 [ -z $RECOVERYMODE ] && RECOVERYMODE=false
+export KEEPVERITY
+export KEEPFORCEENCRYPT
 
 chmod -R 755 .
 
@@ -140,7 +142,7 @@ echo "RECOVERYMODE=$RECOVERYMODE" >> config
 
 ./magiskboot cpio ramdisk.cpio \
 "add 750 init magiskinit" \
-"patch $KEEPVERITY $KEEPFORCEENCRYPT" \
+"patch" \
 "backup ramdisk.cpio.orig" \
 "mkdir 000 .backup" \
 "add 000 .backup/.magisk config"
@@ -158,7 +160,7 @@ rm -f ramdisk.cpio.orig config
 
 if ! $KEEPVERITY; then
   for dt in dtb kernel_dtb extra recovery_dtbo; do
-    [ -f $dt ] && ./magiskboot dtb-patch $dt && ui_print "- Removing dm(avb)-verity in $dt"
+    [ -f $dt ] && ./magiskboot dtb $dt patch && ui_print "- Removing dm(avb)-verity in $dt"
   done
 fi
 
