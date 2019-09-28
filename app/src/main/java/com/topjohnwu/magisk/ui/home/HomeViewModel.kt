@@ -1,19 +1,13 @@
 package com.topjohnwu.magisk.ui.home
 
 import android.content.pm.PackageManager
-import com.skoumal.teanity.extensions.addOnPropertyChangedCallback
-import com.skoumal.teanity.extensions.doOnSubscribeUi
-import com.skoumal.teanity.extensions.subscribeK
-import com.skoumal.teanity.util.KObservableField
 import com.topjohnwu.magisk.*
+import com.topjohnwu.magisk.base.viewmodel.BaseViewModel
 import com.topjohnwu.magisk.data.repository.MagiskRepository
-import com.topjohnwu.magisk.extensions.get
-import com.topjohnwu.magisk.extensions.packageName
-import com.topjohnwu.magisk.extensions.res
-import com.topjohnwu.magisk.extensions.toggle
+import com.topjohnwu.magisk.extensions.*
 import com.topjohnwu.magisk.model.events.*
 import com.topjohnwu.magisk.model.observer.Observer
-import com.topjohnwu.magisk.ui.base.MagiskViewModel
+import com.topjohnwu.magisk.utils.KObservableField
 import com.topjohnwu.magisk.utils.SafetyNetHelper
 import com.topjohnwu.superuser.Shell
 
@@ -31,7 +25,7 @@ enum class MagiskItem {
 
 class HomeViewModel(
     private val magiskRepo: MagiskRepository
-) : MagiskViewModel(State.LOADED) {
+) : BaseViewModel(State.LOADED) {
 
     val hasGMS = runCatching {
         get<PackageManager>().getPackageInfo("com.google.android.gms", 0); true
